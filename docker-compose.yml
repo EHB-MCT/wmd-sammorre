@@ -1,26 +1,26 @@
-version: "3.9"
-
 services:
   api:
-    build: ./api
+    build: ./images/api
     ports:
       - "3000:3000"
     depends_on:
-      - db
+      - db:
+          condition: service_healthy
     environment:
-      DATABASE_URL: postgres://postgres:mysecretpassword@db:5432/mydb
-
+      DATABASE_URL:
   db:
     image: postgres:16
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: mysecretpassword
+      POSTGRES_USER:
+      POSTGRES_PASSWORD:
       POSTGRES_DB: mydb
     volumes:
-      - ./db:/docker-entrypoint-initdb.d
-      - pgdata:/var/lib/postgresql/data
+      - ./images/db:/docker-entrypoint-initdb.d
+      - ./_volumes/pgdata:/var/lib/postgresql/data
     ports:
       - "5432:5432"
-
-volumes:
-  pgdata:
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
