@@ -74,4 +74,60 @@ app.post("/looktime", async (req, res) => {
   }
 });
 
+/* -------------------------------------------
+   GET DATA FOR VISUALIZATION
+--------------------------------------------*/
+app.get("/data", async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT 
+        lt.object_name, 
+        lt.product_genre, 
+        lt.total_time, 
+        p.player_name,
+        s.started_at as session_date
+      FROM look_times lt
+      JOIN sessions s ON lt.session_id = s.id
+      JOIN players p ON s.player_id = p.id
+      ORDER BY s.started_at DESC
+      LIMIT 100
+    `);
+    
+    res.json({
+      success: true,
+      data: result.rows,
+      count: result.rows.length
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/* -------------------------------------------
+   GET SESSION COUNT BY USER FOR CHART
+--------------------------------------------*/
+app.get("/user-sessions", async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT 
+        p.player_name as user,
+        COUNT(s.id)::integer as session_count
+      FROM players p
+      LEFT JOIN sessions s ON p.id = s.player_id
+      GROUP BY p.id, p.player_name
+      HAVING COUNT(s.id) > 0
+      ORDER BY session_count DESC, p.player_name ASC
+      LIMIT 10
+    `);
+    
+    res.json({
+      success: true,
+      data: result.rows,
+      count: result.rows.length
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 app.listen(3000, () => console.log("API running on port 3000"));
