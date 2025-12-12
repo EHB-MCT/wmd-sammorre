@@ -36,22 +36,22 @@ export default {
         console.log('🔄 Starting data fetch...')
         loading.value = true
         
-        console.log('📡 Making API request to /api/user-sessions')
+        console.log('Making API request to /api/user-sessions')
         const response = await axios.get('/api/user-sessions')
         
         console.log('✅ API Response received:', response.data)
-        console.log('📊 Users count:', response.data.data?.length || 0)
-        console.log('📈 Success status:', response.data.success)
+        console.log('Users count:', response.data.data?.length || 0)
+        console.log('Success status:', response.data.success)
         
         data.value = response.data
       } catch (err) {
         console.error('❌ API Error:', err)
-        console.error('🚫 Error details:', err.message)
-        console.error('🔗 Failed URL:', err.config?.url)
+        console.error('Error details:', err.message)
+        console.error('Failed URL:', err.config?.url)
         error.value = 'Failed to fetch data: ' + err.message
       } finally {
         loading.value = false
-        console.log('🏁 Data fetch completed, loading set to false')
+        console.log('Data fetch completed, loading set to false')
       }
     }
 
@@ -61,9 +61,9 @@ export default {
         return
       }
       
-      console.log('🎨 Creating D3.js bar chart...')
-      console.log('📋 Chart container:', chartContainer.value)
-      console.log('📊 Data for chart:', data.value)
+      console.log('Creating D3.js bar chart...')
+      console.log('Chart container:', chartContainer.value)
+      console.log('Data for chart:', data.value)
       
       if (!data.value.data || data.value.data.length === 0) {
         console.log('⚠️ No session data available for visualization')
@@ -71,9 +71,9 @@ export default {
         return
       }
       
-      console.log('📈 Users with sessions:', data.value.data.length)
+      console.log('Users with sessions:', data.value.data.length)
       data.value.data.forEach((item, index) => {
-        console.log(`👤 User ${index + 1}:`, {
+        console.log(`User ${index + 1}:`, {
           name: item.user,
           sessions: item.session_count
         })
@@ -106,13 +106,15 @@ export default {
         .range([0, width])
         .padding(0.1)
       
+      const maxSessions = d3.max(data.value.data, d => d.session_count)
+      const yMax = maxSessions + 2
+      
       const y = d3.scaleLinear()
-        .domain([0, d3.max(data.value.data, d => d.session_count)])
-        .nice()
+        .domain([0, yMax])
         .range([height, 0])
       
       console.log('📏 X scale domain:', data.value.data.map(d => d.user))
-      console.log('📏 Y scale domain:', [0, d3.max(data.value.data, d => d.session_count)])
+      console.log('📏 Y scale domain:', [0, yMax], '(max sessions + 2)')
       
       // X axis
       g.append('g')
@@ -125,7 +127,7 @@ export default {
       
       // Y axis
       g.append('g')
-        .call(d3.axisLeft(y))
+        .call(d3.axisLeft(y).ticks(yMax + 1).tickFormat(d3.format("d")))
         .append('text')
         .attr('transform', 'rotate(-90)')
         .attr('y', 0 - margin.left)
@@ -178,8 +180,8 @@ export default {
     }
 
     onMounted(async () => {
-      console.log('🚀 App mounted - initializing...')
-      console.log('🏠 Chart container ref:', chartContainer)
+      console.log('App mounted - initializing...')
+      console.log('Chart container ref:', chartContainer)
       
       await fetchData()
       createChart()
