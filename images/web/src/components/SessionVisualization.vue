@@ -16,6 +16,14 @@
       <!-- Sessions Sidebar -->
       <div class="sessions-sidebar">
         <h4>Session List</h4>
+        <div class="session-filter">
+          <input 
+            type="text" 
+            v-model="sessionFilter" 
+            placeholder="Filter sessions..." 
+            class="filter-input"
+          />
+        </div>
         <div v-if="recentSessions.length === 0" class="no-sessions">
           No sessions found for this user
         </div>
@@ -27,7 +35,7 @@
           @click="selectSession(session)"
         >
           <div class="session-date-time">
-            <div class="date">{{ formatSessionDate(session.session_date) }}</div>
+            <div class="date">{{ formatSessionDate(session.session_date) }}, {{ new Date(session.session_date).getFullYear() }}</div>
             <div class="time">{{ formatSessionTime(session.session_date) }}</div>
           </div>
           <div class="session-stats">
@@ -79,6 +87,7 @@ export default {
   setup(props, { emit }) {
     const chartContainer = ref(null)
     const selectedSession = ref(null)
+    const sessionFilter = ref('')
     
     // Color scheme for categories
     const categoryColors = {
@@ -92,9 +101,24 @@ export default {
     
     // Get recent sessions for sidebar (sorted by date, latest first)
     const recentSessions = computed(() => {
-      return props.data
+      const sessions = props.data
         .slice()
         .sort((a, b) => new Date(b.session_date) - new Date(a.session_date))
+      
+      // Filter sessions based on filter text
+      if (!sessionFilter.value) return sessions
+      
+      const filterText = sessionFilter.value.toLowerCase()
+      return sessions.filter(session => {
+        const sessionDate = formatSessionDateTime(session.session_date).toLowerCase()
+        const sessionProducts = (session.products || []).length
+        const sessionDuration = getSessionDuration(session.id).toLowerCase()
+        
+        return sessionDate.includes(filterText) || 
+               sessionDuration.includes(filterText) ||
+               sessionProducts.toString().includes(filterText) ||
+               session.id.toString().includes(filterText)
+      })
     })
     
     // Process session data into hierarchical format for chart
@@ -207,25 +231,32 @@ export default {
       const rect = cell.append("rect")
         .attr("width", d => d.y1 - d.y0 - 1)
         .attr("height", d => rectHeight(d))
-        .attr("fill-opacity", 0.6)
+        .attr("fill-opacity", d => d.depth === 0 ? 0.6 : (d.children ? 0.6 : 0.8))
         .attr("fill", d => {
           if (!d.depth) return "#ccc"
-          if (d.data.category) return categoryColors[d.data.category] || color(d.data.name || d.data)
-          // Get parent for consistent coloring
+          // For categories (depth 1), use category-specific color
+          if (d.depth === 1) {
+            return categoryColors[d.data.name] || color(d.data.name || d.data)
+          }
+          // For products (depth 2), use the parent category's color
+          if (d.depth === 2 && d.parent) {
+            return categoryColors[d.parent.data.name] || color(d.parent.data.name)
+          }
+          // Fallback to parent color
           let parent = d
           while (parent.depth > 1) parent = parent.parent
-          return color(parent.data.name || parent.data)
+          return categoryColors[parent.data.name] || color(parent.data.name || parent.data)
         })
         .attr("stroke", "#fff")
         .attr("stroke-width", 2)
         .style("cursor", d => d.children ? "pointer" : "default")
         .on("click", clicked)
         .on("mouseover", function(event, d) {
-          d3.select(this).attr("fill-opacity", 0.8)
+          d3.select(this).attr("fill-opacity", 0.9)
           showTooltip(event, d)
         })
         .on("mouseout", function(event, d) {
-          d3.select(this).attr("fill-opacity", 0.6)
+          d3.select(this).attr("fill-opacity", d.depth === 0 ? 0.6 : (d.children ? 0.6 : 0.8))
           hideTooltip()
         })
       
@@ -373,6 +404,7 @@ export default {
     const formatSessionDateTime = (dateString) => {
       if (!dateString) return 'Unknown'
       return new Date(dateString).toLocaleString('en-US', {
+        year: 'numeric',
         month: 'short',
         day: 'numeric',
         hour: '2-digit',
@@ -433,6 +465,7 @@ export default {
     return {
       chartContainer,
       selectedSession,
+      sessionFilter,
       recentSessions,
       hierarchicalData,
       selectSession,
@@ -502,6 +535,25 @@ export default {
   font-size: 1.1rem;
 }
 
+.session-filter {
+  margin-bottom: 15px;
+}
+
+.filter-input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+
+.filter-input:focus {
+  border-color: #3498db;
+  box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+}
+
 .session-item {
   margin-bottom: 12px;
   padding: 12px;
@@ -510,6 +562,40 @@ export default {
   background: white;
   cursor: pointer;
   transition: all 0.2s ease;
+}
+
+.session-date-time {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.session-date-time .date {
+  font-weight: bold;
+  color: #495057;
+  font-size: 13px;
+}
+
+.session-date-time .time {
+  color: #6c757d;
+  font-size: 12px;
+}
+
+.session-stats {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+}
+
+.session-stats .duration {
+  color: #28a745;
+  font-weight: bold;
+}
+
+.session-stats .product-count {
+  color: #6c757d;
 }
 
 .session-item:hover {
@@ -555,6 +641,18 @@ export default {
 
 .session-stats .product-count {
   color: #6c757d;
+}
+
+.session-year {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  background: #3498db;
+  color: white;
+  font-size: 11px;
+  font-weight: bold;
+  padding: 2px 6px;
+  border-radius: 4px;
 }
 
 .no-sessions, .no-data, .no-session-selected {
