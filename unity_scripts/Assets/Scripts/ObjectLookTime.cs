@@ -155,25 +155,7 @@ public class ObjectLookTime : MonoBehaviour
         // Filter faalt
         return "INVALID_HIERARCHY";
     }
-
-        // 2. Object's Grandparent (DE VEREISTE ROOT, bv. "Products")
-        Transform requiredRoot = productGenreParent.parent;
-        if (requiredRoot == null)
-        {
-            return "INVALID_HIERARCHY";
-        }
-
-        // De Validatie: Controleer of de Grandparent de vereiste naam heeft ("Products")
-        if (requiredRoot.name == REQUIRED_ROOT_NAME) // REQUIRED_ROOT_NAME is "Products"
-        {
-            // ✅ Als de hiërarchie klopt, retourneren we de naam van de DIRECTE parent van het object (het 'Genre').
-            Debug.Log($"[HIERARCHY CHECK] Validatie geslaagd: Root={requiredRoot.name}, Genre={productGenreParent.name}");
-            return productGenreParent.name;
-        }
-
-        // Filter faalt
-        return "INVALID_HIERARCHY";
-    }
+    
     // Maakt een unieke sleutel die de hiërarchie valideert
     private string GetObjectKey(GameObject obj)
     {
