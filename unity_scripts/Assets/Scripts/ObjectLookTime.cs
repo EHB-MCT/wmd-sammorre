@@ -171,18 +171,17 @@ public class ObjectLookTime : MonoBehaviour
 
         foreach (var kvp in accumulatedLookTimes)
         {
-            string[] parts = kvp.Key.Split('|');
-            string objectName = parts[0];
-            string ProductGenre = parts[1];
+            // NEW: Since we're using tag-based detection, keys are just object names
+            string objectName = kvp.Key;
             float totalTime = kvp.Value;
-
+            
             // Sla alleen op als de totale tijd de minimale drempel overschrijdt
             if (totalTime < MIN_LOOK_TIME) continue;
 
             // Formatteer de data als een CSV-regel
-            string logEntry = $"{DateTime.Now:yyyy-MM-dd HH:mm:ss}{DELIMITER}{objectName}{DELIMITER}{ProductGenre}{DELIMITER}{totalTime:F2}\n";
+            string logEntry = $"{DateTime.Now:yyyy-MM-dd HH:mm:ss}{DELIMITER}{objectName}{DELIMITER}{objectName}{DELIMITER}{totalTime:F2}\n";
             sb.Append(logEntry);
-            Debug.Log($"[SESSIE DATA] Voorbereid: {objectName} onder {ProductGenre} ({totalTime:F2}s)");
+            Debug.Log($"[SESSIE DATA] Voorbereid: {objectName} ({totalTime:F2}s)");
         }
         return sb.ToString();
     }
