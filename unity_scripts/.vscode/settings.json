@@ -56,7 +56,7 @@
         "temp/": true,
         "Temp/": true
     },
-    "dotnet.defaultSolution": "WMD_Dev5.sln",
+    "dotnet.defaultSolution": "unity_scripts.sln",
     "editor.defaultFormatter": null,
     "editor.formatOnPaste": true,
     "editor.formatOnSave": true
