@@ -15,7 +15,7 @@
         type="text"
         class="user-input"
         :class="{ 'error': hasError }"
-        placeholder="Type username..."
+        placeholder="Type username or clear to see all..."
       />
       <div v-if="loading" class="loading-indicator">⟳</div>
     </div>
@@ -51,7 +51,7 @@
 </template>
 
 <script>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import axios from 'axios'
 
 export default {
@@ -73,14 +73,31 @@ export default {
     
     // Filter users based on search query
     const filteredUsers = computed(() => {
-      if (!searchQuery.value.trim()) return users.value.slice(0, 5)
+      if (!searchQuery.value.trim()) return users.value.slice(0, 10)
       return users.value
     })
+    
+    // Fetch all users
+    const fetchAllUsers = async () => {
+      try {
+        loading.value = true
+        const response = await axios.get('/api/users')
+        users.value = response.data.data || []
+        hasError.value = false
+      } catch (error) {
+        console.error('Error fetching all users:', error)
+        users.value = []
+        hasError.value = false // Don't show error for empty search
+      } finally {
+        loading.value = false
+      }
+    }
     
     // Search for users
     const searchUsers = async (query) => {
       if (!query.trim()) {
-        users.value = []
+        // When empty, fetch all users
+        await fetchAllUsers()
         return
       }
       
@@ -111,6 +128,13 @@ export default {
       searchTimeout = setTimeout(() => {
         searchUsers(searchQuery.value)
       }, 300)
+    }
+    
+    // Initialize with all users on mount
+    const initializeUsers = async () => {
+      if (!searchQuery.value.trim()) {
+        await fetchAllUsers()
+      }
     }
     
     // Select a user
@@ -153,6 +177,11 @@ export default {
       if (newValue !== searchQuery.value) {
         searchQuery.value = newValue
       }
+    })
+    
+    // Initialize on mount
+    onMounted(() => {
+      initializeUsers()
     })
     
     return {

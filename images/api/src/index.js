@@ -106,8 +106,8 @@ app.get("/data", async (req, res) => {
 });
 
 /* -------------------------------------------
-   GET SESSION COUNT BY USER FOR CHART
---------------------------------------------*/
+    GET SESSION COUNT BY USER FOR CHART
+ --------------------------------------------*/
 app.get("/user-sessions", async (req, res) => {
   try {
     const result = await pool.query(`
@@ -116,7 +116,7 @@ app.get("/user-sessions", async (req, res) => {
         COUNT(s.id)::integer as session_count
       FROM players p
       LEFT JOIN sessions s ON p.id = s.player_id
-      GROUP BY p.id, p.player_name
+      GROUP BY p.player_name
       HAVING COUNT(s.id) > 0
       ORDER BY session_count DESC, p.player_name ASC
       LIMIT 10
@@ -475,8 +475,34 @@ app.get("/user-with-most-sessions", async (req, res) => {
 });
 
 /* -------------------------------------------
-   SEARCH USERS ENDPOINT
---------------------------------------------*/
+    GET ALL USERS ENDPOINT
+ --------------------------------------------*/
+app.get("/users", async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT 
+        p.player_name as user,
+        COUNT(s.id) as session_count
+      FROM players p
+      LEFT JOIN sessions s ON p.id = s.player_id
+      GROUP BY p.player_name
+      HAVING COUNT(s.id) > 0
+      ORDER BY session_count DESC, p.player_name ASC
+      LIMIT 50
+    `);
+    
+    res.json({
+      success: true,
+      data: result.rows
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/* -------------------------------------------
+    SEARCH USERS ENDPOINT
+ --------------------------------------------*/
 app.get("/users-search/:query", async (req, res) => {
   try {
     const { query } = req.params;
