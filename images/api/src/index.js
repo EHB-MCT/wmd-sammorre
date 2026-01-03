@@ -220,69 +220,101 @@ app.get("/session-timing/:username", async (req, res) => {
   }
 });
 
-/* -------------------------------------------
-   SEARCH USERS BY QUERY
---------------------------------------------*/
-app.get("/users-search/:query", async (req, res) => {
-  try {
-    const { query } = req.params;
-    
-    const result = await pool.query(`
-      SELECT 
-        p.player_name as user,
-        COUNT(s.id)::integer as session_count
-      FROM players p
-      LEFT JOIN sessions s ON p.id = s.player_id
-      WHERE LOWER(p.player_name) LIKE LOWER($1)
-      GROUP BY p.id, p.player_name
-      ORDER BY session_count DESC, p.player_name ASC
-      LIMIT 20
-    `, [`%${query}%`]);
-    
-    res.json({
-      success: true,
-      data: result.rows,
-      count: result.rows.length
-    });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
+
 
 /* -------------------------------------------
    GET USER WITH MOST SESSIONS
 --------------------------------------------*/
-app.get("/user-with-most-sessions", async (req, res) => {
-  try {
-    const result = await pool.query(`
-      SELECT 
-        p.player_name as user,
-        COUNT(s.id)::integer as session_count
-      FROM players p
-      LEFT JOIN sessions s ON p.id = s.player_id
-      GROUP BY p.id, p.player_name
-      HAVING COUNT(s.id) > 0
-      ORDER BY session_count DESC, p.player_name ASC
-      LIMIT 1
-    `);
-    
-    if (result.rows.length === 0) {
-      return res.json({
-        success: true,
-        data: null,
-        count: 0
-      });
-    }
-    
-    res.json({
-      success: true,
-      data: result.rows[0],
-      count: 1
+    /* -------------------------------------------
+       GET DETAILED SESSIONS FOR VISUALIZATION
+    --------------------------------------------*/
+    console.log("Registering user-sessions-detailed route...");
+    app.get("/user-sessions-detailed/:username", async (req, res) => {
+      try {
+        const { username } = req.params;
+        
+        // Simplified query to get session data with products and categories
+        const query = `
+          SELECT 
+            s.id,
+            s.started_at::timestamp as session_date,
+            lt.object_name,
+            lt.product_genre,
+            lt.total_time
+          FROM sessions s
+          LEFT JOIN look_times lt ON s.id = lt.session_id
+          LEFT JOIN players p ON s.player_id = p.id
+          WHERE p.player_name = $1
+            AND lt.object_name IS NOT NULL
+          ORDER BY s.started_at DESC, lt.created_at
+        `;
+        
+        console.log("Executing query for username:", username);
+        console.log("Query:", query);
+        console.log("Starting database query...");
+        
+        let result;
+        try {
+          result = await pool.query(query, [username]);
+          console.log("Query successful, rows returned:", result.rowCount);
+          
+          if (result.rowCount === 0) {
+            return res.json({
+              success: true,
+              data: [],
+              count: 0
+            });
+          }
+          
+          // Process the results into expected format
+          const sessionMap = new Map();
+          result.rows.forEach(row => {
+            const sessionKey = row.id.toString();
+            if (!sessionMap.has(sessionKey)) {
+              sessionMap.set(sessionKey, {
+                id: sessionKey,
+                session_date: row.session_date,
+                products: [],
+                total_time: 0
+              });
+            }
+            const session = sessionMap.get(sessionKey);
+            if (row.object_name) {
+              session.products.push({
+                object_name: row.object_name,
+                product_genre: row.product_genre || 'Uncategorized',
+                total_time: row.total_time
+              });
+              session.total_time += row.total_time || 0;
+            }
+          });
+          
+          const sessions = Array.from(sessionMap.values());
+          
+          res.json({
+            success: true,
+            data: sessions,
+            count: sessions.length
+          });
+          
+        } catch (dbError) {
+          console.error("Database query failed:", dbError);
+          console.log("Error details:", {
+            message: dbError.message,
+            detail: dbError.detail,
+            where: dbError.where,
+            code: dbError.code
+          });
+          res.status(500).json({ 
+            success: false, 
+            error: 'Database query failed',
+            details: dbError.message || 'Unknown database error'
+          });
+        }
+      } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+      }
     });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
 
 /* -------------------------------------------
    GENERATE SAMPLE DATA
@@ -336,6 +368,7 @@ app.post("/generate-sample-data", async (req, res) => {
         'INSERT INTO players (player_name) VALUES ($1) RETURNING id',
         [userName]
       );
+      userIds[userName] = result.rows[0]?.id;
       userIds[userName] = result.rows[0].id;
     }
 
@@ -406,4 +439,68 @@ app.post("/generate-sample-data", async (req, res) => {
   }
 });
 
-app.listen(3000, () => console.log("API running on port 3000"));
+/* -------------------------------------------
+   GET USER WITH MOST SESSIONS
+--------------------------------------------*/
+app.get("/user-with-most-sessions", async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT 
+        p.player_name as user,
+        COUNT(s.id) as session_count
+      FROM players p
+      LEFT JOIN sessions s ON p.id = s.player_id
+      GROUP BY p.player_name
+      ORDER BY session_count DESC
+      LIMIT 1
+    `);
+    
+    if (result.rows.length === 0) {
+      return res.json({
+        success: true,
+        data: null
+      });
+    }
+    
+    res.json({
+      success: true,
+      data: {
+        user: result.rows[0].user,
+        session_count: parseInt(result.rows[0].session_count)
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/* -------------------------------------------
+   SEARCH USERS ENDPOINT
+--------------------------------------------*/
+app.get("/users-search/:query", async (req, res) => {
+  try {
+    const { query } = req.params;
+    
+    const result = await pool.query(`
+      SELECT 
+        p.player_name as user,
+        COUNT(s.id) as session_count
+      FROM players p
+      LEFT JOIN sessions s ON p.id = s.player_id
+      WHERE p.player_name ILIKE $1
+      GROUP BY p.player_name
+      ORDER BY session_count DESC, p.player_name
+      LIMIT 10
+    `, [`%${query}%`]);
+    
+    res.json({
+      success: true,
+      data: result.rows
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+    console.log("API routes registered:");
+    app.listen(3000, () => console.log("API running on port 3000"));

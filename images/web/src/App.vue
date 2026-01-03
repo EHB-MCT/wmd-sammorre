@@ -28,6 +28,9 @@
         <SessionVisualization
           :data="sessionVisualizationData"
           :loading="sessionVisualizationLoading"
+          :selectedUser="selectedUser"
+          :timelineData="timelineData"
+          @session-selected="handleSessionSelection"
         />
         
         <!-- Session Timeline -->
@@ -99,10 +102,44 @@ export default {
       try {
         sessionVisualizationLoading.value = true
         sessionVisualizationError.value = ''
-        const response = await axios.get(`/api/user-sessions`)
-        // Transform session data for visualization
-        const processedData = response.data.data?.filter(session => session.player_name === username) || []
-        sessionVisualizationData.value = processedData
+        
+        // First try the detailed endpoint
+        let response = await axios.get(`/api/user-sessions-detailed/${encodeURIComponent(username)}`)
+        
+        // If detailed endpoint fails, fallback to basic sessions data
+        if (!response.data || response.data.length === 0) {
+          console.log('Detailed endpoint failed, trying fallback...')
+          const fallbackResponse = await axios.get(`/data`)
+          
+          if (fallbackResponse.data && fallbackResponse.data.length > 0) {
+            // Transform session data for visualization
+            const userSessions = fallbackResponse.data.filter(item => item.player_name === username) || []
+            const sessionMap = new Map()
+            
+            userSessions.forEach(item => {
+              const sessionKey = `${item.session_date}-${item.player_name}`
+              if (!sessionMap.has(sessionKey)) {
+                sessionMap.set(sessionKey, {
+                  id: sessionKey,
+                  session_date: item.session_date,
+                  products: [],
+                  total_time: 0
+                })
+              }
+              const session = sessionMap.get(sessionKey)
+              session.products.push(item.object_name)
+              session.total_time += item.total_time
+            })
+            
+            sessionVisualizationData.value = Array.from(sessionMap.values())
+            sessionVisualizationError.value = ''
+            console.log('Using fallback data with', sessionVisualizationData.value.length, 'sessions')
+          }
+        } else {
+          sessionVisualizationData.value = response.data.data || []
+          console.log('Using detailed API data with', sessionVisualizationData.value.length, 'sessions')
+        }
+        
       } catch (err) {
         console.error('Error fetching session data:', err)
         sessionVisualizationError.value = 'Failed to fetch session data'
@@ -150,6 +187,8 @@ export default {
     const fetchUserData = async (username) => {
       if (!username) return
       
+      console.log("Fetching data for user:", username)
+      
       // Fetch session visualization and timeline data in parallel
       await Promise.all([
         fetchSessionVisualizationData(username),
@@ -160,6 +199,12 @@ export default {
     // Handle user selection
     const handleUserSelection = (username) => {
       fetchUserData(username)
+    }
+    
+    // Handle session selection
+    const handleSessionSelection = (session) => {
+      console.log('Session selected:', session)
+      // You can add additional logic here if needed
     }
     
     // Initialize app
@@ -189,7 +234,8 @@ export default {
       sessionError,
       sessionVisualizationError,
       timelineError,
-      handleUserSelection
+      handleUserSelection,
+      handleSessionSelection
     }
   }
 }

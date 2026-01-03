@@ -1,35 +1,50 @@
 <template>
   <div class="session-visualization">
     <div class="chart-header">
-      <h3>Session Visualization</h3>
+      <h3>Session Details - Product View</h3>
       <div class="controls">
         <div v-if="selectedUser" class="user-display">
           <small>User: <strong>{{ selectedUser }}</strong></small>
+        </div>
+        <div v-if="selectedSession" class="session-display">
+          <small>Session: <strong>{{ formatSessionDateTime(selectedSession.session_date) }}</strong></small>
         </div>
       </div>
     </div>
     
     <div class="main-content">
-      <!-- Recent Sessions Sidebar -->
+      <!-- Sessions Sidebar -->
       <div class="sessions-sidebar">
-        <h4>Recent Sessions</h4>
+        <h4>Session List</h4>
         <div v-if="recentSessions.length === 0" class="no-sessions">
           No sessions found for this user
         </div>
-        <div v-for="(session, index) in recentSessions" :key="session.id" class="session-item">
-          <div class="session-date">{{ formatDate(session.session_date) }}</div>
-          <div class="session-products">
-            <span v-for="product in session.products" :key="product" class="product-tag">
-              {{ product }}
-            </span>
+        <div 
+          v-for="(session, index) in recentSessions" 
+          :key="session.id" 
+          class="session-item"
+          :class="{ 'selected': selectedSession && selectedSession.id === session.id }"
+          @click="selectSession(session)"
+        >
+          <div class="session-date-time">
+            <div class="date">{{ formatSessionDate(session.session_date) }}</div>
+            <div class="time">{{ formatSessionTime(session.session_date) }}</div>
+          </div>
+          <div class="session-stats">
+            <div class="duration">{{ getSessionDuration(session.id) }}</div>
+            <div class="product-count">{{ session.products.length }} products</div>
           </div>
         </div>
       </div>
       
-      <!-- Main Visualization Area -->
+      <!-- Main Chart Area -->
       <div ref="chartContainer" class="chart-area">
-        <div v-if="processedData.nodes.length === 0" class="no-data">
-          No product data available for this user
+        <div v-if="loading" class="loading">Loading session data...</div>
+        <div v-else-if="!selectedSession" class="no-session-selected">
+          Select a session to view product details
+        </div>
+        <div v-else-if="!hierarchicalData.children || hierarchicalData.children.length === 0" class="no-data">
+          No product data available for this session
         </div>
       </div>
     </div>
@@ -54,199 +69,338 @@ export default {
     selectedUser: {
       type: String,
       default: ''
+    },
+    timelineData: {
+      type: Array,
+      default: () => []
     }
   },
-  setup(props) {
+  emits: ['session-selected'],
+  setup(props, { emit }) {
     const chartContainer = ref(null)
+    const selectedSession = ref(null)
     
-    // Process session data into nodes and links
-    const processedData = computed(() => {
-      const nodes = new Map()
-      const links = []
-      
-      props.data.forEach(session => {
-        const products = session.products || []
-        products.forEach((product, index) => {
-          if (!nodes.has(product)) {
-            nodes.set(product, {
-              id: product,
-              name: product,
-              views: 0,
-              sessions: [],
-              genre: ''
-            })
-          }
-          nodes.get(product).views += (session.total_time || 60)
-          nodes.get(product).sessions.push(session.id)
-          
-          // Create links between products in same session
-          if (index > 0) {
-            links.push({
-              source: products[index - 1],
-              target: product,
-              sessionId: session.id
-            })
-          }
-        })
-      })
-      
-      return {
-        nodes: Array.from(nodes.values()),
-        links: links
-      }
-    })
+    // Color scheme for categories
+    const categoryColors = {
+      'Electronics': '#3498db',
+      'Home': '#e74c3c', 
+      'Books': '#f39c12',
+      'Clothing': '#2ecc71',
+      'Beauty': '#9b59b6',
+      'Sports': '#1abc9c'
+    }
     
-    // Get recent sessions for sidebar
+    // Get recent sessions for sidebar (sorted by date, latest first)
     const recentSessions = computed(() => {
       return props.data
         .slice()
         .sort((a, b) => new Date(b.session_date) - new Date(a.session_date))
-        .slice(0, 10)
     })
     
-    const initializeChart = () => {
-      if (!chartContainer.value || processedData.value.nodes.length === 0) return
+    // Process session data into hierarchical format for chart
+    const hierarchicalData = computed(() => {
+      if (!selectedSession.value) return { children: [] }
+      
+      const session = selectedSession.value
+      const products = session.products || []
+      
+      // Get actual session duration from timeline data (more accurate)
+      let actualSessionTime = (session.total_time || 0)
+      
+      // Group products by category for display purposes
+      const categories = {}
+      
+      products.forEach(product => {
+        const category = product.product_genre || 'Uncategorized'
+        const time = product.total_time || 0
+        
+        if (!categories[category]) {
+          categories[category] = {
+            name: category,
+            value: 0,
+            children: []
+          }
+        }
+        
+        categories[category].value += time
+        categories[category].children.push({
+          name: product.object_name || product,
+          value: time,
+          category: category
+        })
+      })
+      
+      // Use actual session time for total, but show product breakdown for categories
+      const hierarchy = {
+        name: `Session ${session.id}`,
+        value: actualSessionTime, // Use actual session duration
+        children: Object.values(categories).sort((a, b) => b.value - a.value)
+      }
+      
+      // Also add a separate bar for total session duration to show the time difference
+      const sessionTimeEntry = {
+        name: 'Total Session Duration',
+        value: actualSessionTime,
+        children: [],
+        isSessionTotal: true
+      }
+      
+      return hierarchy
+    })
+    
+    // Create a simple bar chart
+    const createBarChart = () => {
+      
+      if (!chartContainer.value) {
+        console.log('No chart container, returning')
+        return
+      }
+      
+      if (!selectedSession.value) {
+        console.log('No selected session, returning')
+        return
+      }
+      
+      if (!hierarchicalData.value.children || hierarchicalData.value.children.length === 0) {
+        console.log('No hierarchical data, returning')
+        return
+      }
+      
+      console.log('All checks passed, creating chart')
       
       // Clear existing chart
       d3.select(chartContainer.value).selectAll("*").remove()
       
       // Chart dimensions
       const containerWidth = chartContainer.value.clientWidth || 800
-      const width = containerWidth - 300 // Account for sidebar
-      const height = 600
-      
-      // Create color scale
-      const color = d3.scaleOrdinal(d3.schemeTableau10)
-      
-      // Create force simulation
-      const simulation = d3.forceSimulation(processedData.value.nodes)
-        .force("link", d3.forceLink(processedData.value.links).id(d => d.id).distance(50))
-        .force("charge", d3.forceManyBody().strength(-300))
-        .force("center", d3.forceCenter(width / 2, height / 2))
+      const containerHeight = 500
+      const margin = { top: 20, right: 20, bottom: 40, left: 100 }
+      const width = containerWidth - margin.left - margin.right
+      const height = containerHeight - margin.top - margin.bottom
       
       // Create SVG
       const svg = d3.select(chartContainer.value)
         .append("svg")
-        .attr("width", width)
-        .attr("height", height)
+        .attr("width", containerWidth)
+        .attr("height", containerHeight)
       
-      // Create arrow marker for links
-      svg.append("defs").append("marker")
-        .attr("id", "arrowhead")
-        .attr("viewBox", "0 -5 10 10")
-        .attr("refX", 20)
-        .attr("refY", 0)
-        .attr("markerWidth", 8)
-        .attr("markerHeight", 8)
-        .attr("orient", "auto")
-        .append("path")
-        .attr("d", "M0,-5L10,0L0,5")
-        .attr("fill", "#999")
+      const g = svg.append("g")
+        .attr("transform", "translate(" + margin.left + "," + margin.top + ")")
       
-      // Create links
-      const link = svg.append("g")
-        .selectAll("line")
-        .data(processedData.value.links)
-        .join("line")
-        .attr("stroke", "#999")
-        .attr("stroke-opacity", 0.6)
-        .attr("stroke-width", 2)
-        .attr("marker-end", "url(#arrowhead)")
+      // Simple bar chart
+      const allCategories = hierarchicalData.value.children || []
+      const maxValue = d3.max(allCategories, function(d) { return d.value })
       
-      // Create nodes
-      const node = svg.append("g")
-        .selectAll("circle")
-        .data(processedData.value.nodes)
-        .join("circle")
-        .attr("r", d => Math.min(20, 5 + d.views / 100))
-        .attr("fill", (d, i) => color(i))
+      const x = d3.scaleLinear()
+        .domain([0, maxValue || 0])
+        .range([0, width])
+      
+      const y = d3.scaleBand()
+        .domain(allCategories.map(function(d) { return d.name }))
+        .range([0, height])
+        .padding(0.2)
+      
+      // Create bars for each category
+      const bars = g.selectAll(".category-bar")
+        .data(allCategories)
+        .enter()
+        .append("g")
+        .attr("class", "category-bar")
+      
+      // Category bars
+      bars.append("rect")
+        .attr("x", 0)
+        .attr("y", function(d) { return y(d.name) })
+        .attr("width", function(d) { return x(d.value) })
+        .attr("height", y.bandwidth())
+        .attr("fill", function(d) { 
+          // Use different color for session total duration
+          if (d.isSessionTotal) return "#e74c3c"
+          return categoryColors[d.name] || "#95a5a6"
+        })
         .attr("stroke", "#fff")
         .attr("stroke-width", 2)
         .style("cursor", "pointer")
-        .call(d3.drag()
-          .on("start", dragstarted)
-          .on("drag", dragged)
-          .on("end", dragended))
+        .on("mouseover", function(event, d) {
+          d3.select(this).attr("opacity", 0.8)
+          showTooltip(event, d)
+        })
+        .on("mouseout", function(event, d) {
+          d3.select(this).attr("opacity", 1)
+          hideTooltip()
+        })
       
-      // Add labels
-      const label = svg.append("g")
-        .selectAll("text")
-        .data(processedData.value.nodes)
-        .join("text")
-        .text(d => d.name)
+// Category labels
+      bars.append("text")
+        .attr("x", function(d) { return d.isSessionTotal ? -10 : -10 })
+        .attr("y", function(d) { return y(d.name) + y.bandwidth() / 2 })
+        .attr("text-anchor", "end")
+        .style("font-size", "12px")
+        .style("fill", function(d) { return d.isSessionTotal ? "#fff" : "#333" })
+        .style("font-weight", "bold")
+        .text(function(d) { return d.name })
+      
+      // Value labels - show both session total and individual category total
+      bars.append("text")
+        .attr("x", function(d) { return x(d.value) + 5 })
+        .attr("y", function(d) { return y(d.name) + y.bandwidth() / 2 })
+        .attr("alignment-baseline", "middle")
         .style("font-size", "10px")
-        .style("font-family", "sans-serif")
-        .style("fill", "#333")
-        .style("text-anchor", "middle")
+        .style("fill", function(d) { return d.isSessionTotal ? "#fff" : "#666" })
+        .text(function(d) { 
+          const sessionDuration = getSessionDuration(selectedSession.value.id)
+          const isSessionTotal = d.name === "Total Session Duration"
+          if (isSessionTotal) {
+            return sessionDuration + " (Total)"
+          } else {
+            return formatDuration(d.value) + " (" + (d.children ? d.children.length : 0) + " products)"
+          }
+        })
+      
+      // X axis
+      g.append("g")
+        .attr("transform", "translate(0," + height + ")")
+        .call(d3.axisBottom(x).tickFormat(function(d) { return formatDuration(d) }))
+        .selectAll("text")
+        .style("font-size", "11px")
+        .style("fill", "#666")
+      
+      // Tooltip functions
+      const tooltip = d3.select("body").append("div")
+        .attr("class", "icicle-tooltip")
+        .style("position", "absolute")
+        .style("visibility", "hidden")
+        .style("background", "rgba(0,0,0,0.8)")
+        .style("color", "white")
+        .style("padding", "8px 12px")
+        .style("border-radius", "4px")
+        .style("font-size", "12px")
         .style("pointer-events", "none")
+        .style("z-index", "9999")
       
-      // Add tooltips
-      node.append("title")
-        .text(d => `${d.name}\nViews: ${d.views}\nSessions: ${d.sessions.length}`)
+      function showTooltip(event, d) {
+        const productCount = d.children ? d.children.length : 0
+        const tooltipText = "<strong>" + d.name + "</strong><br>Total: " + formatDuration(d.value) + "<br>" + productCount + " products"
+        
+        tooltip
+          .style("visibility", "visible")
+          .html(tooltipText)
+          .style("left", (event.pageX + 10) + "px")
+          .style("top", (event.pageY - 10) + "px")
+      }
       
-      // Update positions on simulation tick
-      simulation.on("tick", () => {
-        link
-          .attr("x1", d => d.source.x)
-          .attr("y1", d => d.source.y)
-          .attr("x2", d => d.target.x)
-          .attr("y2", d => d.target.y)
-        
-        node
-          .attr("cx", d => d.x)
-          .attr("cy", d => d.y)
-        
-        label
-          .attr("x", d => d.x)
-          .attr("y", d => d.y - 25)
+      function hideTooltip() {
+        tooltip.style("visibility", "hidden")
+      }
+    }
+    
+    // Select a session
+    const selectSession = (session) => {
+      selectedSession.value = session
+      emit('session-selected', session)
+      nextTick(() => {
+        createBarChart()
       })
     }
     
-    const dragstarted = (event, d) => {
-      if (!event.active) simulation.alphaTarget(0.3).restart()
-      d.fx = d.x
-      d.fy = d.y
+    // Get session duration from timeline data
+    const getSessionDuration = (sessionId) => {
+      if (!sessionId || !props.timelineData || props.timelineData.length === 0) {
+        return formatDuration(0)
+      }
+      
+      const session = props.timelineData.find(function(s) { 
+        return s.session_id.toString() === sessionId.toString() 
+      })
+      if (session && session.duration_seconds) {
+        return formatDuration(session.duration_seconds)
+      }
+      
+      return formatDuration(0)
     }
     
-    const dragged = (event, d) => {
-      d.fx = event.x
-      d.fy = event.y
+    // Format functions
+    const formatDuration = (seconds) => {
+      if (!seconds || seconds === 0) return '0s'
+      const minutes = Math.floor(seconds / 60)
+      const remainingSeconds = Math.round(seconds % 60)
+      if (minutes > 0) {
+        return remainingSeconds > 0 ? `${minutes}m ${remainingSeconds}s` : `${minutes}m`
+      }
+      return `${remainingSeconds}s`
     }
     
-    const dragended = (event, d) => {
-      if (!event.active) simulation.alphaTarget(0)
-      d.fx = null
-      d.fy = null
+    const formatSessionDateTime = (dateString) => {
+      if (!dateString) return 'Unknown'
+      return new Date(dateString).toLocaleString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      })
     }
     
-    const formatDate = (dateString) => {
-      if (!dateString) return 'No date'
-      return new Date(dateString).toLocaleDateString()
+    const formatSessionDate = (dateString) => {
+      if (!dateString) return 'Unknown'
+      return new Date(dateString).toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric'
+      })
     }
     
-    // Watch for data changes
-    watch(() => processedData.value, () => {
-      if (props.data.length > 0) {
-        nextTick(() => {
-          initializeChart()
-        })
+    const formatSessionTime = (dateString) => {
+      if (!dateString) return 'Unknown'
+      return new Date(dateString).toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit'
+      })
+    }
+    
+    // Auto-select latest session when data changes
+    watch(() => recentSessions.value, (sessions) => {
+      if (sessions && sessions.length > 0 && !selectedSession.value) {
+        selectSession(sessions[0])
       }
     }, { immediate: true })
     
+    // Also watch timeline data for any updates
+    watch(() => props.timelineData, () => {
+      if (selectedSession.value && props.timelineData && props.timelineData.length > 0) {
+        nextTick(() => {
+          createBarChart()
+        })
+      }
+    })
+    
+    // Watch for selected session changes
+    watch(() => selectedSession.value, () => {
+      if (selectedSession.value) {
+        nextTick(() => {
+          createBarChart()
+        })
+      }
+    })
+    
     // Handle window resize
     const handleResize = () => {
-      if (processedData.value.nodes.length > 0) {
+      if (selectedSession.value && hierarchicalData.value.children.length > 0) {
         nextTick(() => {
-          initializeChart()
+          createBarChart()
         })
       }
     }
     
     return {
       chartContainer,
+      selectedSession,
       recentSessions,
-      processedData,
-      formatDate
+      hierarchicalData,
+      selectSession,
+      formatDuration,
+      formatSessionDateTime,
+      formatSessionDate,
+      formatSessionTime,
+      getSessionDuration
     }
   }
 }
@@ -281,7 +435,7 @@ export default {
   justify-content: flex-end;
 }
 
-.user-display {
+.user-display, .session-display {
   color: #6c757d;
   font-size: 14px;
 }
@@ -309,44 +463,74 @@ export default {
 }
 
 .session-item {
-  margin-bottom: 15px;
-  padding-bottom: 15px;
-  border-bottom: 1px solid #e9ecef;
+  margin-bottom: 12px;
+  padding: 12px;
+  border: 1px solid #e9ecef;
+  border-radius: 6px;
+  background: white;
+  cursor: pointer;
+  transition: all 0.2s ease;
 }
 
-.session-item:last-child {
-  border-bottom: none;
+.session-item:hover {
+  border-color: #3498db;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
-.session-date {
+.session-item.selected {
+  border-color: #3498db;
+  background: #e3f2fd;
+  box-shadow: 0 2px 4px rgba(52, 152, 219, 0.2);
+}
+
+.session-date-time {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.session-date-time .date {
   font-weight: bold;
   color: #495057;
-  margin-bottom: 8px;
+  font-size: 13px;
+}
+
+.session-date-time .time {
+  color: #6c757d;
   font-size: 12px;
 }
 
-.session-products {
+.session-stats {
   display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
 }
 
-.product-tag {
-  background: #3498db;
-  color: white;
-  padding: 3px 8px;
-  border-radius: 12px;
-  font-size: 11px;
-  border-radius: 4px;
+.session-stats .duration {
+  color: #28a745;
+  font-weight: bold;
 }
 
-.no-sessions, .no-data {
+.session-stats .product-count {
+  color: #6c757d;
+}
+
+.no-sessions, .no-data, .no-session-selected {
   text-align: center;
   padding: 40px 20px;
   color: #6c757d;
   font-style: italic;
   background: #f8f9fa;
   border-radius: 8px;
+}
+
+.loading {
+  text-align: center;
+  padding: 40px;
+  color: #666;
+  font-size: 16px;
 }
 
 .chart-area {
@@ -356,10 +540,22 @@ export default {
   border-radius: 8px;
   background: white;
   position: relative;
+  overflow: hidden;
 }
 
 .chart-area svg {
   width: 100%;
   height: 100%;
+}
+
+/* Tooltip styles */
+:global(.icicle-tooltip) {
+  background: rgba(0,0,0,0.8) !important;
+  color: white !important;
+  padding: 8px 12px !important;
+  border-radius: 4px !important;
+  font-size: 12px !important;
+  pointer-events: none !important;
+  z-index: 9999 !important;
 }
 </style>
