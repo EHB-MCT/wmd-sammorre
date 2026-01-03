@@ -148,124 +148,30 @@ export default {
       return hierarchy
     })
     
-    // Create a simple bar chart
-    const createBarChart = () => {
-      
-      if (!chartContainer.value) {
-        console.log('No chart container, returning')
+    // Create a zoomable icicle chart
+    const createIcicleChart = () => {
+      if (!chartContainer.value || !selectedSession.value || !hierarchicalData.value.children) {
+        console.log('Missing requirements for icicle chart')
         return
       }
       
-      if (!selectedSession.value) {
-        console.log('No selected session, returning')
-        return
-      }
-      
-      if (!hierarchicalData.value.children || hierarchicalData.value.children.length === 0) {
-        console.log('No hierarchical data, returning')
-        return
-      }
-      
-      console.log('All checks passed, creating chart')
+      console.log('Creating icicle chart with data:', hierarchicalData.value)
       
       // Clear existing chart
       d3.select(chartContainer.value).selectAll("*").remove()
       
-      // Chart dimensions
-      const containerWidth = chartContainer.value.clientWidth || 800
-      const containerHeight = 500
-      const margin = { top: 20, right: 20, bottom: 40, left: 100 }
-      const width = containerWidth - margin.left - margin.right
-      const height = containerHeight - margin.top - margin.bottom
+      // Chart dimensions - note height > width for vertical layout
+      const width = chartContainer.value.clientWidth || 800
+      const height = 500
       
       // Create SVG
       const svg = d3.select(chartContainer.value)
         .append("svg")
-        .attr("width", containerWidth)
-        .attr("height", containerHeight)
+        .attr("width", width)
+        .attr("height", height)
+        .style("font", "10px sans-serif")
       
-      const g = svg.append("g")
-        .attr("transform", "translate(" + margin.left + "," + margin.top + ")")
-      
-      // Simple bar chart
-      const allCategories = hierarchicalData.value.children || []
-      const maxValue = d3.max(allCategories, function(d) { return d.value })
-      
-      const x = d3.scaleLinear()
-        .domain([0, maxValue || 0])
-        .range([0, width])
-      
-      const y = d3.scaleBand()
-        .domain(allCategories.map(function(d) { return d.name }))
-        .range([0, height])
-        .padding(0.2)
-      
-      // Create bars for each category
-      const bars = g.selectAll(".category-bar")
-        .data(allCategories)
-        .enter()
-        .append("g")
-        .attr("class", "category-bar")
-      
-      // Category bars
-      bars.append("rect")
-        .attr("x", 0)
-        .attr("y", function(d) { return y(d.name) })
-        .attr("width", function(d) { return x(d.value) })
-        .attr("height", y.bandwidth())
-        .attr("fill", function(d) { 
-          // Use different color for session total duration
-          if (d.isSessionTotal) return "#e74c3c"
-          return categoryColors[d.name] || "#95a5a6"
-        })
-        .attr("stroke", "#fff")
-        .attr("stroke-width", 2)
-        .style("cursor", "pointer")
-        .on("mouseover", function(event, d) {
-          d3.select(this).attr("opacity", 0.8)
-          showTooltip(event, d)
-        })
-        .on("mouseout", function(event, d) {
-          d3.select(this).attr("opacity", 1)
-          hideTooltip()
-        })
-      
-// Category labels
-      bars.append("text")
-        .attr("x", function(d) { return d.isSessionTotal ? -10 : -10 })
-        .attr("y", function(d) { return y(d.name) + y.bandwidth() / 2 })
-        .attr("text-anchor", "end")
-        .style("font-size", "12px")
-        .style("fill", function(d) { return d.isSessionTotal ? "#fff" : "#333" })
-        .style("font-weight", "bold")
-        .text(function(d) { return d.name })
-      
-      // Value labels - show both session total and individual category total
-      bars.append("text")
-        .attr("x", function(d) { return x(d.value) + 5 })
-        .attr("y", function(d) { return y(d.name) + y.bandwidth() / 2 })
-        .attr("alignment-baseline", "middle")
-        .style("font-size", "10px")
-        .style("fill", function(d) { return d.isSessionTotal ? "#fff" : "#666" })
-        .text(function(d) { 
-          const sessionDuration = getSessionDuration(selectedSession.value.id)
-          const isSessionTotal = d.name === "Total Session Duration"
-          if (isSessionTotal) {
-            return sessionDuration + " (Total)"
-          } else {
-            return formatDuration(d.value) + " (" + (d.children ? d.children.length : 0) + " products)"
-          }
-        })
-      
-      // X axis
-      g.append("g")
-        .attr("transform", "translate(0," + height + ")")
-        .call(d3.axisBottom(x).tickFormat(function(d) { return formatDuration(d) }))
-        .selectAll("text")
-        .style("font-size", "11px")
-        .style("fill", "#666")
-      
-      // Tooltip functions
+      // Create tooltip
       const tooltip = d3.select("body").append("div")
         .attr("class", "icicle-tooltip")
         .style("position", "absolute")
@@ -278,9 +184,143 @@ export default {
         .style("pointer-events", "none")
         .style("z-index", "9999")
       
+      // Color scale
+      const color = d3.scaleOrdinal(d3.quantize(d3.interpolateRainbow, hierarchicalData.value.children.length + 1))
+      
+      // Prepare the data for partition
+      const hierarchy = d3.hierarchy(hierarchicalData.value)
+        .sum(d => d.value || 0)
+        .sort((a, b) => b.height - a.height || b.value - a.value)
+      
+      // Create partition layout with vertical orientation (height first, then width)
+      const root = d3.partition()
+        .size([height, (hierarchy.height + 1) * width / 3])
+        (hierarchy)
+      
+      // Append cells using groups with transforms
+      const cell = svg
+        .selectAll("g")
+        .data(root.descendants())
+        .join("g")
+        .attr("transform", d => `translate(${d.y0},${d.x0})`)
+      
+      const rect = cell.append("rect")
+        .attr("width", d => d.y1 - d.y0 - 1)
+        .attr("height", d => rectHeight(d))
+        .attr("fill-opacity", 0.6)
+        .attr("fill", d => {
+          if (!d.depth) return "#ccc"
+          if (d.data.category) return categoryColors[d.data.category] || color(d.data.name || d.data)
+          // Get parent for consistent coloring
+          let parent = d
+          while (parent.depth > 1) parent = parent.parent
+          return color(parent.data.name || parent.data)
+        })
+        .attr("stroke", "#fff")
+        .attr("stroke-width", 2)
+        .style("cursor", d => d.children ? "pointer" : "default")
+        .on("click", clicked)
+        .on("mouseover", function(event, d) {
+          d3.select(this).attr("fill-opacity", 0.8)
+          showTooltip(event, d)
+        })
+        .on("mouseout", function(event, d) {
+          d3.select(this).attr("fill-opacity", 0.6)
+          hideTooltip()
+        })
+      
+      const text = cell.append("text")
+        .style("user-select", "none")
+        .attr("pointer-events", "none")
+        .attr("x", 4)
+        .attr("y", 13)
+        .attr("fill-opacity", d => +labelVisible(d))
+        .style("font-weight", d => d.depth === 0 ? "bold" : "normal")
+        .style("fill", "#fff")
+      
+      text.append("tspan")
+        .text(d => d.data.name || d.data)
+      
+      const format = d3.format(",d")
+      const tspan = text.append("tspan")
+        .attr("fill-opacity", d => labelVisible(d) * 0.7)
+        .text(d => ` ${format(d.value)}`)
+      
+      let focus = root
+      
+      // On click, change focus and transition it into view
+      function clicked(event, p) {
+        focus = focus === p ? p = p.parent : p
+        
+        root.each(d => d.target = {
+          x0: (d.x0 - p.x0) / (p.x1 - p.x0) * height,
+          x1: (d.x1 - p.x0) / (p.x1 - p.x0) * height,
+          y0: d.y0 - p.y0,
+          y1: d.y1 - p.y0
+        })
+        
+        const t = cell.transition().duration(750)
+          .attr("transform", d => `translate(${d.target.y0},${d.target.x0})`)
+        
+        rect.transition(t).attr("height", d => rectHeight(d.target))
+        text.transition(t).attr("fill-opacity", d => +labelVisible(d.target))
+        tspan.transition(t).attr("fill-opacity", d => labelVisible(d.target) * 0.7)
+        
+        // Add back button if not at root
+        if (p.depth > 0) {
+          svg.selectAll(".back-button").remove()
+          svg.append("text")
+            .attr("class", "back-button")
+            .attr("x", 10)
+            .attr("y", 20)
+            .attr("fill", "#333")
+            .attr("font-size", "14px")
+            .attr("font-weight", "bold")
+            .attr("cursor", "pointer")
+            .text("← Back")
+            .on("click", () => {
+              focus = root
+              root.each(d => d.target = {
+                x0: d.x0,
+                x1: d.x1,
+                y0: d.y0,
+                y1: d.y1
+              })
+              
+              const t2 = cell.transition().duration(750)
+                .attr("transform", d => `translate(${d.target.y0},${d.target.x0})`)
+              
+              rect.transition(t2).attr("height", d => rectHeight(d.target))
+              text.transition(t2).attr("fill-opacity", d => +labelVisible(d.target))
+              tspan.transition(t2).attr("fill-opacity", d => labelVisible(d.target) * 0.7)
+              
+              d3.select(".back-button").remove()
+            })
+        } else {
+          svg.selectAll(".back-button").remove()
+        }
+      }
+      
+      function rectHeight(d) {
+        return d.x1 - d.x0 - Math.min(1, (d.x1 - d.x0) / 2)
+      }
+      
+      function labelVisible(d) {
+        return d.y1 <= width && d.y0 >= 0 && d.x1 - d.x0 > 16
+      }
+      
       function showTooltip(event, d) {
         const productCount = d.children ? d.children.length : 0
-        const tooltipText = "<strong>" + d.name + "</strong><br>Total: " + formatDuration(d.value) + "<br>" + productCount + " products"
+        const timeDisplay = formatDuration(d.data.value)
+        let tooltipText = `<strong>${d.data.name || d.data}</strong><br>Time: ${timeDisplay}<br>`
+        
+        if (d.depth === 0) {
+          tooltipText += `${d.children ? d.children.length : 0} categories`
+        } else if (d.children) {
+          tooltipText += `${productCount} products`
+        } else {
+          tooltipText += "Individual product"
+        }
         
         tooltip
           .style("visibility", "visible")
@@ -299,7 +339,7 @@ export default {
       selectedSession.value = session
       emit('session-selected', session)
       nextTick(() => {
-        createBarChart()
+        createIcicleChart()
       })
     }
     
@@ -367,7 +407,7 @@ export default {
     watch(() => props.timelineData, () => {
       if (selectedSession.value && props.timelineData && props.timelineData.length > 0) {
         nextTick(() => {
-          createBarChart()
+          createIcicleChart()
         })
       }
     })
@@ -376,7 +416,7 @@ export default {
     watch(() => selectedSession.value, () => {
       if (selectedSession.value) {
         nextTick(() => {
-          createBarChart()
+          createIcicleChart()
         })
       }
     })
@@ -385,7 +425,7 @@ export default {
     const handleResize = () => {
       if (selectedSession.value && hierarchicalData.value.children.length > 0) {
         nextTick(() => {
-          createBarChart()
+          createIcicleChart()
         })
       }
     }
