@@ -2,197 +2,194 @@
   <div id="app">
     <div class="container">
       <div class="header">
-        <h1>WMD Data Visualization</h1>
+        <h1>WMD User Analytics Dashboard</h1>
         <p>Interactive data visualization powered by Vue.js and D3.js</p>
+        <div v-if="loading" style="text-align: center; padding: 20px; color: #666;">Loading...</div>
+        <div v-if="error" style="text-align: center; padding: 20px; color: red;">Error: {{ error }}</div>
       </div>
       
-      <div class="visualization-container">
-        <h2>Sample Data Visualization</h2>
-        <div class="chart" ref="chartContainer">
-          <div v-if="loading" class="loading">Loading data...</div>
-          <div v-else-if="error" class="error">{{ error }}</div>
-          <div v-else>Chart will be rendered here</div>
-        </div>
+      <!-- User Selector -->
+      <UserSelector 
+        v-model="selectedUser" 
+        @user-selected="handleUserSelection"
+      />
+      
+      <!-- Charts stacked vertically -->
+      <div class="charts-container">
+        <!-- Existing Bar Chart -->
+        <SessionBarChart 
+          :data="sessionData"
+          :loading="sessionLoading"
+          :error="sessionError"
+        />
+        
+        
+        <!-- Session Visualization -->
+        <SessionVisualization
+          :data="sessionVisualizationData"
+          :loading="sessionVisualizationLoading"
+        />
+        
+        <!-- Session Timeline -->
+        <SessionTimeline 
+          :data="timelineData"
+          :loading="timelineLoading"
+        />
       </div>
     </div>
   </div>
 </template>
 
 <script>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import axios from 'axios'
-import * as d3 from 'd3'
+import UserSelector from './components/UserSelector.vue'
+import SessionBarChart from './components/SessionBarChart.vue'
+import SessionVisualization from './components/SessionVisualization.vue'
+import SessionTimeline from './components/SessionTimeline.vue'
 
 export default {
   name: 'App',
+  components: {
+    UserSelector,
+    SessionBarChart,
+    SessionVisualization,
+    SessionTimeline
+  },
   setup() {
-    const chartContainer = ref(null)
-    const loading = ref(true)
-    const error = ref(null)
-    const data = ref(null)
-
-    const fetchData = async () => {
+    // State management
+    const selectedUser = ref('')
+    const sessionData = ref([])
+    const sessionVisualizationData = ref([])
+    const timelineData = ref([])
+    
+    // Loading states
+    const sessionLoading = ref(false)
+    const sessionVisualizationLoading = ref(false)
+    const timelineLoading = ref(false)
+    
+    // Error states
+    const sessionError = ref('')
+    const sessionVisualizationError = ref('')
+    const timelineError = ref('')
+    
+    // Fetch session data for bar chart
+    const fetchSessionData = async () => {
       try {
-        console.log('🔄 Starting data fetch...')
-        loading.value = true
-        
-        console.log('Making API request to /api/user-sessions')
+        sessionLoading.value = true
+        sessionError.value = ''
         const response = await axios.get('/api/user-sessions')
-        
-        console.log('✅ API Response received:', response.data)
-        console.log('Users count:', response.data.data?.length || 0)
-        console.log('Success status:', response.data.success)
-        
-        data.value = response.data
+        sessionData.value = response.data.data || []
       } catch (err) {
-        console.error('❌ API Error:', err)
-        console.error('Error details:', err.message)
-        console.error('Failed URL:', err.config?.url)
-        error.value = 'Failed to fetch data: ' + err.message
+        console.error('Error fetching session data:', err)
+        sessionError.value = 'Failed to fetch session data'
+        sessionData.value = []
       } finally {
-        loading.value = false
-        console.log('Data fetch completed, loading set to false')
+        sessionLoading.value = false
       }
     }
-
-    const createChart = () => {
-      if (!data.value || !chartContainer.value) {
-        console.log('⚠️ Cannot create chart - missing data or container')
+    
+    // Fetch session visualization data
+    const fetchSessionVisualizationData = async (username) => {
+      if (!username) {
+        sessionVisualizationData.value = []
         return
       }
       
-      console.log('Creating D3.js bar chart...')
-      console.log('Chart container:', chartContainer.value)
-      console.log('Data for chart:', data.value)
-      
-      if (!data.value.data || data.value.data.length === 0) {
-        console.log('⚠️ No session data available for visualization')
-        chartContainer.value.innerHTML = '<div>No session data available</div>'
+      try {
+        sessionVisualizationLoading.value = true
+        sessionVisualizationError.value = ''
+        const response = await axios.get(`/api/user-sessions`)
+        // Transform session data for visualization
+        const processedData = response.data.data?.filter(session => session.player_name === username) || []
+        sessionVisualizationData.value = processedData
+      } catch (err) {
+        console.error('Error fetching session data:', err)
+        sessionVisualizationError.value = 'Failed to fetch session data'
+        sessionVisualizationData.value = []
+      } finally {
+        sessionVisualizationLoading.value = false
+      }
+    }
+    
+    // Fetch timeline data for session chart
+    const fetchTimelineData = async (username) => {
+      if (!username) {
+        timelineData.value = []
         return
       }
       
-      console.log('Users with sessions:', data.value.data.length)
-      data.value.data.forEach((item, index) => {
-        console.log(`User ${index + 1}:`, {
-          name: item.user,
-          sessions: item.session_count
-        })
-      })
-      
-      // Clear any existing chart
-      d3.select(chartContainer.value).selectAll("*").remove()
-      
-      // Chart dimensions
-      const margin = { top: 20, right: 30, bottom: 60, left: 80 }
-      const containerWidth = chartContainer.value.clientWidth
-      const containerHeight = 400
-      const width = containerWidth - margin.left - margin.right
-      const height = containerHeight - margin.top - margin.bottom
-      
-      console.log('📐 Chart dimensions:', { width, height })
-      
-      // Create SVG
-      const svg = d3.select(chartContainer.value)
-        .append('svg')
-        .attr('width', containerWidth)
-        .attr('height', containerHeight)
-      
-      const g = svg.append('g')
-        .attr('transform', `translate(${margin.left},${margin.top})`)
-      
-      // Scales
-      const x = d3.scaleBand()
-        .domain(data.value.data.map(d => d.user))
-        .range([0, width])
-        .padding(0.1)
-      
-      const maxSessions = d3.max(data.value.data, d => d.session_count)
-      const yMax = maxSessions + 2
-      
-      const y = d3.scaleLinear()
-        .domain([0, yMax])
-        .range([height, 0])
-      
-      console.log('📏 X scale domain:', data.value.data.map(d => d.user))
-      console.log('📏 Y scale domain:', [0, yMax], '(max sessions + 2)')
-      
-      // X axis
-      g.append('g')
-        .attr('transform', `translate(0,${height})`)
-        .call(d3.axisBottom(x))
-        .selectAll('text')
-        .attr('transform', 'rotate(-45)')
-        .style('text-anchor', 'end')
-        .style('font-size', '12px')
-      
-      // Y axis
-      g.append('g')
-        .call(d3.axisLeft(y).ticks(yMax + 1).tickFormat(d3.format("d")))
-        .append('text')
-        .attr('transform', 'rotate(-90)')
-        .attr('y', 0 - margin.left)
-        .attr('x', 0 - (height / 2))
-        .attr('dy', '1em')
-        .style('text-anchor', 'middle')
-        .style('font-size', '14px')
-        .text('Total Sessions')
-      
-      // Bars
-      g.selectAll('.bar')
-        .data(data.value.data)
-        .enter().append('rect')
-        .attr('class', 'bar')
-        .attr('x', d => x(d.user))
-        .attr('width', x.bandwidth())
-        .attr('y', d => y(d.session_count))
-        .attr('height', d => height - y(d.session_count))
-        .attr('fill', '#4CAF50')
-        .on('mouseover', function(event, d) {
-          d3.select(this).attr('fill', '#45a049')
-          console.log('🖱️ Hover over:', { user: d.user, sessions: d.session_count })
-        })
-        .on('mouseout', function() {
-          d3.select(this).attr('fill', '#4CAF50')
-        })
-      
-      // Value labels on bars
-      g.selectAll('.bar-label')
-        .data(data.value.data)
-        .enter().append('text')
-        .attr('class', 'bar-label')
-        .attr('x', d => x(d.user) + x.bandwidth() / 2)
-        .attr('y', d => y(d.session_count) - 5)
-        .attr('text-anchor', 'middle')
-        .style('font-size', '12px')
-        .style('font-weight', 'bold')
-        .text(d => d.session_count)
-      
-      // Chart title
-      svg.append('text')
-        .attr('x', containerWidth / 2)
-        .attr('y', 15)
-        .attr('text-anchor', 'middle')
-        .style('font-size', '16px')
-        .style('font-weight', 'bold')
-        .text('Users Ranked by Total Sessions')
-      
-      console.log('✅ D3.js bar chart created successfully')
+      try {
+        timelineLoading.value = true
+        timelineError.value = ''
+        const response = await axios.get(`/api/session-timing/${encodeURIComponent(username)}`)
+        timelineData.value = response.data.data || []
+      } catch (err) {
+        console.error('Error fetching timeline data:', err)
+        timelineError.value = 'Failed to fetch session timing data'
+        timelineData.value = []
+      } finally {
+        timelineLoading.value = false
+      }
     }
-
+    
+    // Get user with most sessions for default selection
+    const getDefaultUser = async () => {
+      try {
+        const response = await axios.get('/api/user-with-most-sessions')
+        if (response.data.data && response.data.data.user) {
+          selectedUser.value = response.data.data.user
+          await fetchUserData(selectedUser.value)
+        }
+      } catch (err) {
+        console.error('Error getting default user:', err)
+      }
+    }
+    
+    // Fetch all user data when user is selected
+    const fetchUserData = async (username) => {
+      if (!username) return
+      
+      // Fetch session visualization and timeline data in parallel
+      await Promise.all([
+        fetchSessionVisualizationData(username),
+        fetchTimelineData(username)
+      ])
+    }
+    
+    // Handle user selection
+    const handleUserSelection = (username) => {
+      fetchUserData(username)
+    }
+    
+    // Initialize app
     onMounted(async () => {
-      console.log('App mounted - initializing...')
-      console.log('Chart container ref:', chartContainer)
+      // Load initial session data for bar chart
+      await fetchSessionData()
       
-      await fetchData()
-      createChart()
-      
-      console.log('✅ App initialization complete')
+      // Get default user and load their data
+      await getDefaultUser()
     })
-
+    
+    // Watch for selected user changes
+    watch(selectedUser, (newUser) => {
+      if (newUser) {
+        fetchUserData(newUser)
+      }
+    })
+    
     return {
-      chartContainer,
-      loading,
-      error
+      selectedUser,
+      sessionData,
+      sessionVisualizationData,
+      timelineData,
+      sessionLoading,
+      sessionVisualizationLoading,
+      timelineLoading,
+      sessionError,
+      sessionVisualizationError,
+      timelineError,
+      handleUserSelection
     }
   }
 }

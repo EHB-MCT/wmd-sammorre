@@ -1,7 +1,9 @@
 import express from "express";
 import { Pool } from "pg";
+import cors from "cors";
 
 const app = express();
+app.use(cors());
 app.use(express.json());
 
 const pool = new Pool({
@@ -126,6 +128,280 @@ app.get("/user-sessions", async (req, res) => {
       count: result.rows.length
     });
   } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/* -------------------------------------------
+   GET PRODUCT HIERARCHY FOR ICICLE CHART
+--------------------------------------------*/
+app.get("/product-hierarchy/:username", async (req, res) => {
+  try {
+    const { username } = req.params;
+    
+    const result = await pool.query(`
+      SELECT 
+        lt.product_genre,
+        lt.object_name as product,
+        SUM(lt.total_time) as total_time_seconds
+      FROM look_times lt
+      JOIN sessions s ON lt.session_id = s.id
+      JOIN players p ON s.player_id = p.id
+      WHERE p.player_name = $1
+        AND lt.product_genre IS NOT NULL
+        AND lt.object_name IS NOT NULL
+      GROUP BY lt.product_genre, lt.object_name
+      ORDER BY lt.product_genre ASC, total_time_seconds DESC
+    `, [username]);
+    
+    // Build hierarchical structure for icicle chart
+    const genreMap = {};
+    result.rows.forEach(row => {
+      if (!genreMap[row.product_genre]) {
+        genreMap[row.product_genre] = {
+          name: row.product_genre,
+          children: []
+        };
+      }
+      genreMap[row.product_genre].children.push({
+        name: row.product,
+        value: row.total_time_seconds
+      });
+    });
+    
+    const hierarchy = {
+      name: "All Products",
+      children: Object.values(genreMap)
+    };
+    
+    res.json({
+      success: true,
+      data: hierarchy,
+      count: result.rows.length
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/* -------------------------------------------
+   GET SESSION TIMING FOR HORIZONTAL BAR CHART
+--------------------------------------------*/
+app.get("/session-timing/:username", async (req, res) => {
+  try {
+    const { username } = req.params;
+    
+    const result = await pool.query(`
+      SELECT 
+        s.id as session_id,
+        DATE(s.started_at) as date,
+        EXTRACT(HOUR FROM s.started_at) as hour,
+        EXTRACT(MINUTE FROM s.started_at) as minute,
+        CASE 
+          WHEN s.ended_at IS NOT NULL THEN
+            ROUND(EXTRACT(EPOCH FROM (s.ended_at - s.started_at)), 2)
+          ELSE 0
+        END as duration_seconds
+      FROM sessions s
+      JOIN players p ON s.player_id = p.id
+      WHERE p.player_name = $1
+        AND s.started_at IS NOT NULL
+      ORDER BY s.started_at DESC
+      LIMIT 50
+    `, [username]);
+    
+    res.json({
+      success: true,
+      data: result.rows,
+      count: result.rows.length
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/* -------------------------------------------
+   SEARCH USERS BY QUERY
+--------------------------------------------*/
+app.get("/users-search/:query", async (req, res) => {
+  try {
+    const { query } = req.params;
+    
+    const result = await pool.query(`
+      SELECT 
+        p.player_name as user,
+        COUNT(s.id)::integer as session_count
+      FROM players p
+      LEFT JOIN sessions s ON p.id = s.player_id
+      WHERE LOWER(p.player_name) LIKE LOWER($1)
+      GROUP BY p.id, p.player_name
+      ORDER BY session_count DESC, p.player_name ASC
+      LIMIT 20
+    `, [`%${query}%`]);
+    
+    res.json({
+      success: true,
+      data: result.rows,
+      count: result.rows.length
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/* -------------------------------------------
+   GET USER WITH MOST SESSIONS
+--------------------------------------------*/
+app.get("/user-with-most-sessions", async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT 
+        p.player_name as user,
+        COUNT(s.id)::integer as session_count
+      FROM players p
+      LEFT JOIN sessions s ON p.id = s.player_id
+      GROUP BY p.id, p.player_name
+      HAVING COUNT(s.id) > 0
+      ORDER BY session_count DESC, p.player_name ASC
+      LIMIT 1
+    `);
+    
+    if (result.rows.length === 0) {
+      return res.json({
+        success: true,
+        data: null,
+        count: 0
+      });
+    }
+    
+    res.json({
+      success: true,
+      data: result.rows[0],
+      count: 1
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/* -------------------------------------------
+   GENERATE SAMPLE DATA
+--------------------------------------------*/
+app.post("/generate-sample-data", async (req, res) => {
+  try {
+    await pool.query('BEGIN');
+
+    // Clear existing data
+    await pool.query('DELETE FROM look_times');
+    await pool.query('DELETE FROM sessions');
+    await pool.query('DELETE FROM players');
+
+    // Sample users
+    const users = [
+      'Alice', 'Bob', 'Charlie', 'Diana', 'Eve', 'Frank', 'Grace', 'Henry'
+    ];
+
+    // Product data by genre
+    const productData = {
+      'Electronics': [
+        'Laptop Pro', 'Smartphone X', 'Wireless Headphones', 'Smart Watch', 'Tablet Plus',
+        'Gaming Console', 'Bluetooth Speaker', 'Digital Camera', 'Fitness Tracker', 'Drone'
+      ],
+      'Clothing': [
+        'Cotton T-Shirt', 'Denim Jeans', 'Winter Jacket', 'Running Shoes', 'Dress Shirt',
+        'Wool Sweater', 'Sports Shorts', 'Leather Boots', 'Casual Hoodie', 'Formal Suit'
+      ],
+      'Books': [
+        'JavaScript Guide', 'Python Cookbook', 'Design Patterns', 'Data Science', 'Web Development',
+        'Machine Learning', 'Database Design', 'UI/UX Principles', 'Cloud Computing', 'DevOps Handbook'
+      ],
+      'Home': [
+        'Coffee Maker', 'Vacuum Cleaner', 'Microwave Oven', 'Air Purifier', 'Smart Thermostat',
+        'LED TV', 'Washing Machine', 'Dishwasher', 'Blender', 'Toaster Oven'
+      ],
+      'Sports': [
+        'Yoga Mat', 'Dumbbells Set', 'Running Shoes', 'Tennis Racket', 'Basketball',
+        'Swimming Goggles', 'Cycling Helmet', 'Golf Clubs', 'Soccer Ball', 'Tennis Balls'
+      ],
+      'Beauty': [
+        'Face Cream', 'Makeup Palette', 'Hair Serum', 'Nail Polish', 'Perfume',
+        'Lipstick Set', 'Eye Shadow', 'Foundation', 'Shampoo', 'Body Lotion'
+      ]
+    };
+
+    // Insert users
+    const userIds = {};
+    for (const userName of users) {
+      const result = await pool.query(
+        'INSERT INTO players (player_name) VALUES ($1) RETURNING id',
+        [userName]
+      );
+      userIds[userName] = result.rows[0].id;
+    }
+
+    // Generate sessions and look times
+    const sessionsPerUser = 4;
+    const lookTimesPerSession = 8;
+
+    for (const userName of users) {
+      const userId = userIds[userName];
+      
+      for (let sessionIndex = 0; sessionIndex < sessionsPerUser; sessionIndex++) {
+        // Create session with realistic timing
+        const sessionDate = new Date();
+        sessionDate.setDate(sessionDate.getDate() - Math.floor(Math.random() * 30));
+        sessionDate.setHours(Math.floor(Math.random() * 24));
+        sessionDate.setMinutes(Math.floor(Math.random() * 60));
+        
+        const sessionDuration = 5 + Math.floor(Math.random() * 25) * 60; // 5-30 minutes in seconds
+        const sessionEnd = new Date(sessionDate.getTime() + sessionDuration * 1000);
+
+        const sessionResult = await pool.query(`
+          INSERT INTO sessions (player_id, started_at, ended_at) 
+          VALUES ($1, $2, $3) RETURNING id
+        `, [userId, sessionDate, sessionEnd]);
+
+        const sessionId = sessionResult.rows[0].id;
+
+        // Generate look times for this session
+        const genres = Object.keys(productData);
+        const selectedGenres = [];
+        
+        // Select 2-4 random genres for this session
+        const genreCount = 2 + Math.floor(Math.random() * 3);
+        for (let i = 0; i < genreCount; i++) {
+          const genre = genres[Math.floor(Math.random() * genres.length)];
+          if (!selectedGenres.includes(genre)) {
+            selectedGenres.push(genre);
+          }
+        }
+
+        for (const genre of selectedGenres) {
+          const products = productData[genre];
+          const product = products[Math.floor(Math.random() * products.length)];
+          const lookTime = 2 + Math.floor(Math.random() * 43); // 2-45 seconds
+
+          await pool.query(`
+            INSERT INTO look_times (session_id, object_name, product_genre, total_time)
+            VALUES ($1, $2, $3, $4)
+          `, [sessionId, product, genre, lookTime]);
+        }
+      }
+    }
+
+    await pool.query('COMMIT');
+
+    res.json({
+      success: true,
+      message: `Generated sample data for ${users.length} users with ${users.length * sessionsPerUser} sessions`,
+      users: users.length,
+      sessions: users.length * sessionsPerUser,
+      lookTimes: users.length * sessionsPerUser * lookTimesPerSession
+    });
+
+  } catch (err) {
+    await pool.query('ROLLBACK');
+    console.error('Error generating sample data:', err);
     res.status(500).json({ success: false, error: err.message });
   }
 });
