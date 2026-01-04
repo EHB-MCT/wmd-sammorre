@@ -2,3 +2,4 @@ _volumes
 .env
 OPENCODE.txt
 Documentation.txt
+GITFLOW.md

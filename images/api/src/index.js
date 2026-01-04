@@ -21,7 +21,7 @@ const pool = new Pool({
 });
 
 // Data directory path
-const DATA_DIR = path.join(__dirname, '../../data');
+const DATA_DIR = '/app/data';
 
 /* -------------------------------------------
    CREATE PLAYER
