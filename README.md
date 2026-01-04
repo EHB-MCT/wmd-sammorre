@@ -99,7 +99,8 @@ The system currently tracks:
 
 ## Sources & References
 
-
+**Easy Peasy First Person Controller** - (https://postgresql.org](https://assetstore.unity.com/packages/tools/physics/easy-peasy-first-person-controller-317073)
+    found in unity_scripts\Assets\EasyPeasyFirstPersonController\Scripts\FirstPersonController.cs
 
 **PostgreSQL Documentation** - [postgresql.org](https://postgresql.org)  
    Database design and queries
