@@ -1,8 +1,8 @@
 <template>
   <div class="session-timeline">
-    <div class="chart-header">
-      <h3>Session Timeline (Duration in Minutes)</h3>
-    </div>
+      <div class="chart-header">
+       <h3>Top 10 Sessions by Duration (Ranked from Highest to Lowest)</h3>
+     </div>
     
     <div ref="chartContainer" class="chart-container"></div>
   </div>
@@ -53,7 +53,10 @@ export default {
         dateObj: new Date(`${session.date} ${session.hour}:${session.minute}:00`)
       })).filter(session => session.duration >= 0) // Include all sessions, even 0 duration
       
-      if (processedData.length === 0) {
+      // Sort by duration (highest to lowest) and limit to top 10
+      const sortedData = processedData.sort((a, b) => b.duration - a.duration).slice(0, 10)
+      
+      if (sortedData.length === 0) {
         d3.select(chartContainer.value)
           .append('div')
           .style('text-align', 'center')
@@ -80,13 +83,13 @@ export default {
         .attr('transform', `translate(${margin.left},${margin.top})`)
       
       // Scales
-      const maxDuration = d3.max(processedData, d => d.duration)
+      const maxDuration = d3.max(sortedData, d => d.duration)
       const x = d3.scaleLinear()
         .domain([0, maxDuration * 1.1]) // Add 10% padding
         .range([0, width])
       
       const y = d3.scaleBand()
-        .domain(processedData.map((d, i) => i))
+        .domain(sortedData.map((d, i) => i))
         .range([0, height - margin.top - margin.bottom])
         .padding(0.1)
       
@@ -132,18 +135,12 @@ export default {
         .style('fill', '#666')
         .text('Session Duration')
       
-      // Y axis (time)
+      // Y axis (ranking)
       const yAxis = d3.axisLeft(y)
         .tickFormat((d, i) => {
-          const session = processedData[i]
+          const session = sortedData[i]
           if (!session) return ''
-          const date = new Date(session.date)
-          return date.toLocaleDateString('en-US', { 
-            month: 'short', 
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-          })
+          return `#${i + 1} Session ${session.session_id}`
         })
       
       g.append('g')
@@ -154,7 +151,7 @@ export default {
       
       // Bars
       const bars = g.selectAll('.bar')
-        .data(processedData)
+        .data(sortedData)
         .enter().append('rect')
         .attr('class', 'bar')
         .attr('y', (d, i) => y(i))
@@ -186,9 +183,29 @@ export default {
         .delay((d, i) => i * 50)
         .style('opacity', 1)
       
+      // Add ranking labels
+      const rankLabels = g.selectAll('.rank-label')
+        .data(sortedData)
+        .enter().append('text')
+        .attr('class', 'rank-label')
+        .attr('x', -10)
+        .attr('y', (d, i) => y(i) + y.bandwidth() / 2)
+        .attr('dy', '0.35em')
+        .style('text-anchor', 'end')
+        .style('font-size', '12px')
+        .style('font-weight', 'bold')
+        .style('fill', '#666')
+        .text((d, i) => `#${i + 1}`)
+        .style('opacity', 0)
+      
+      rankLabels.transition()
+        .duration(800)
+        .delay((d, i) => i * 50 + 400)
+        .style('opacity', 1)
+      
       // Add duration labels on bars
       const labels = g.selectAll('.bar-label')
-        .data(processedData.filter(d => x(d.duration) > 40)) // Only show labels for wider bars
+        .data(sortedData.filter(d => x(d.duration) > 40)) // Only show labels for wider bars
         .enter().append('text')
         .attr('class', 'bar-label')
         .attr('x', d => x(d.duration) + 5)
@@ -213,7 +230,7 @@ export default {
         .style('font-size', '16px')
         .style('font-weight', 'bold')
         .style('fill', '#2c3e50')
-        .text('Session Duration Timeline')
+        .text('Top 10 Sessions by Duration')
       
       // Tooltip functions
       const showTooltip = (event, d) => {
@@ -232,8 +249,9 @@ export default {
         
         const sessionDateTime = formatSessionDateTime(d.date, d.hour, d.minute)
         
+        const rank = sortedData.findIndex(s => s.session_id === d.session_id) + 1
         tooltip.html(`
-          <strong>Session #${d.session_id}</strong><br>
+          <strong>Rank #${rank} - Session #${d.session_id}</strong><br>
           ${sessionDateTime}<br>
           Duration: ${formatTime(d.duration)}
         `)
