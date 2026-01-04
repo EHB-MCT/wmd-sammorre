@@ -4,206 +4,277 @@ using System.Text;
 using System;
 using System.Collections.Generic;
 
-public class ObjectLookTime : MonoBehaviour
+namespace WMD.Sammorre.GamePlay.Tracking
 {
-    // De maximale afstand van de raycast
-    public float lookDistance = 10f;
-
-    private string filePath;
-    private Dictionary<string, float> accumulatedLookTimes = new Dictionary<string, float>();
-    private GameObject lastHitObject = null;
-    private float lastUpdateTime;
-    private string previousSessionData = "";
-
-    private const string DELIMITER = ";";
-    private const float MIN_LOOK_TIME = 0.05f;
-
-    // Definitie van de vereiste root-parent naam
-    private const string REQUIRED_ROOT_NAME = "Products";
-
-    void Start()
+    /// <summary>
+    /// Tracks and accumulates look time for objects in the scene
+    /// </summary>
+    public class ObjectLookTime : MonoBehaviour
     {
-        filePath = Application.persistentDataPath + "/LookTimeData_Acc_Sessions.csv";
-        lastUpdateTime = Time.time;
-
-        Debug.Log($"[SETUP] Data wordt bijgewerkt in: {filePath}");
-
-        // 1. Laad data van VORIGE sessies (indien aanwezig)
-        if (File.Exists(filePath))
-        {
-            previousSessionData = File.ReadAllText(filePath, Encoding.UTF8);
-
-            // Voeg een scheidingsrij toe
-            previousSessionData += "\n\n" + $"{DELIMITER}{DELIMITER}--- NIEUWE SESSIE GESTART OP {DateTime.Now:yyyy-MM-dd HH:mm:ss} ---{DELIMITER}\n";
-            Debug.Log("[SETUP] Oude sessie data geladen en scheidingsrij toegevoegd.");
-        }
-        else
-        {
-            // Bestand bestaat nog niet, begin met de aangepaste header
-            previousSessionData = $"Tijdstempel{DELIMITER}ObjectNaam{DELIMITER}Product Catergory{DELIMITER}Totale Kijktijd (sec)\n";
-            Debug.Log("[SETUP] Nieuw CSV-bestand header aangemaakt.");
-        }
-    }
-
-    void Update()
-    {
-        float deltaTime = Time.time - lastUpdateTime;
-
-        // 1. Accumuleer tijd voor het object dat in de VORIGE frame werd bekeken
-        if (lastHitObject != null)
-        {
-            string key = GetObjectKey(lastHitObject);
-
-            // ✅ HIER GEBEURT DE FILTERING! Alleen objecten met de correcte hiërarchie krijgen accumulatie.
-            if (key != "INVALID_HIERARCHY")
-            {
-                if (accumulatedLookTimes.ContainsKey(key))
-                {
-                    accumulatedLookTimes[key] += deltaTime;
-                }
-                else
-                {
-                    accumulatedLookTimes.Add(key, deltaTime);
-                }
-            }
-            // Anders wordt de tijd Weggegooid (bv. voor de "Ground")
-        }
-
-        // 2. Raycast uit voor de HUIDIGE frame
-        RaycastHit hit;
-        if (Physics.Raycast(transform.position, transform.forward, out hit, lookDistance))
-        {
-            lastHitObject = hit.collider.gameObject;
-        }
-        else
-        {
-            lastHitObject = null; // Kijken naar niets
-        }
-
-        lastUpdateTime = Time.time;
-    }
-
-    // Helper om de naam van de Hiërarchische Root (3 niveaus omhoog) te krijgen en de hiërarchie te valideren.
-    private string GetHierarchicalRootName(Transform t)
-    {
-        // NEW: Check if object itself is a Product Category
-        if (t.CompareTag("Category"))
-        {
-            Debug.Log($"[HIERARCHY CHECK] Object {t.name} is a Product Category");
-            return t.name;
-        }
+        [Header("Raycast Settings")]
+        [Tooltip("Maximum distance for the raycast")]
+        [SerializeField]
+        private float _lookDistance = 10f;
         
-        // NEW: Check if parent has Product Parent tag
-        Transform parent = t.parent;
-        if (parent != null && parent.CompareTag("Product"))
-        {
-            Debug.Log($"[HIERARCHY CHECK] Parent {parent.name} has Product Parent tag");
-            // Look for sibling that is a Category
-            foreach (Transform sibling in parent)
-            {
-                if (sibling.CompareTag("Category"))
-                {
-                    Debug.Log($"[HIERARCHY CHECK] Found Category sibling: {sibling.name} for Product {t.name}");
-                    return sibling.name;
-                }
-            }
-        }
+        private string _filePath;
+        private Dictionary<string, float> _accumulatedLookTimes = 
+            new Dictionary<string, float>();
+        private GameObject _lastHitObject = null;
+        private float _lastUpdateTime;
+        private string _previousSessionData = "";
         
-        // NEW: Traverse up to find Category or Products root
-        Transform current = t.parent;
-        while (current != null)
-        {
-            if (current.CompareTag("Category"))
-            {
-                Debug.Log($"[HIERARCHY CHECK] Found Category ancestor: {current.name} for Product {t.name}");
-                return current.name;
-            }
-            if (current.name == "Products")
-            {
-                Debug.Log($"[HIERARCHY CHECK] Found Products root ancestor for {t.name}");
-                // Product is direct child of Products, use product tag as category
-                return t.name;
-            }
-            current = current.parent;
-        }
+        private const string k_DELIMITER = ";";
+        private const float k_MIN_LOOK_TIME = 0.05f;
+        private const string k_REQUIRED_ROOT_NAME = "Products";
+        private const string k_INVALID_HIERARCHY = "INVALID_HIERARCHY";
         
-        // Fallback to original method if no tags found
-        Debug.LogWarning($"[HIERARCHY WARNING] No proper tags found for {t.name}, using original method");
-        
-        // 1. Object's Parent (bv. "water") - DIT IS HET GENRE DAT WE NODIG HEBBEN
-        Transform productGenreParent = t.parent;
-        if (productGenreParent == null)
+        /// <summary>
+        /// Initialize data tracking and load previous session data
+        /// </summary>
+        private void Start()
         {
-            return "INVALID_HIERARCHY";
-        }
-
-        // 2. Object's Grandparent (DE VEREISTE ROOT, bv. "Products")
-        Transform requiredRoot = productGenreParent.parent;
-        if (requiredRoot == null)
-        {
-            return "INVALID_HIERARCHY";
-        }
-
-        // De Validatie: Controleer of de Grandparent de vereiste naam heeft ("Products")
-        if (requiredRoot.name == REQUIRED_ROOT_NAME) // REQUIRED_ROOT_NAME is "Products"
-        {
-            // ✅ Als de hiërarchie klopt, retourneren we de naam van de DIRECTE parent van het object (het 'Genre').
-            Debug.Log($"[HIERARCHY CHECK] Validation passed: Root={requiredRoot.name}, Genre={productGenreParent.name}");
-            return productGenreParent.name;
-        }
-
-        // Filter faalt
-        return "INVALID_HIERARCHY";
-    }
-    
-    // Maakt een unieke sleutel die de hiërarchie valideert
-    private string GetObjectKey(GameObject obj)
-    {
-        // NEW: Just use object name directly since we're using tag-based detection
-        string objectName = obj.name;
-        return objectName;
-    }
-
-    // De definitieve opslag van alle totale tijden voor de HUIDIGE sessie
-    private string GetCurrentSessionData()
-    {
-        StringBuilder sb = new StringBuilder();
-
-        foreach (var kvp in accumulatedLookTimes)
-        {
-            // NEW: Since we're using tag-based detection, keys are just object names
-            string objectName = kvp.Key;
-            float totalTime = kvp.Value;
+            _filePath = Path.Combine(
+                Application.persistentDataPath, 
+                "LookTimeData_Acc_Sessions.csv"
+            );
+            _lastUpdateTime = Time.time;
             
-            // Sla alleen op als de totale tijd de minimale drempel overschrijdt
-            if (totalTime < MIN_LOOK_TIME) continue;
-
-            // Formatteer de data als een CSV-regel
-            string logEntry = $"{DateTime.Now:yyyy-MM-dd HH:mm:ss}{DELIMITER}{objectName}{DELIMITER}{objectName}{DELIMITER}{totalTime:F2}\n";
-            sb.Append(logEntry);
-            Debug.Log($"[SESSIE DATA] Voorbereid: {objectName} ({totalTime:F2}s)");
+            Debug.Log($"[SETUP] Data will be updated at: {_filePath}");
+            
+            LoadPreviousSessionData();
         }
-        return sb.ToString();
-    }
-
-    // Zorg ervoor dat ALLE data wordt opgeslagen wanneer de applicatie wordt afgesloten
-    private void OnApplicationQuit()
-    {
-        // 1. Haal de data van de huidige sessie op
-        string currentSessionData = GetCurrentSessionData();
-
-        // 2. Combineer de oude data, de scheidingsrij en de nieuwe data
-        string finalData = previousSessionData + currentSessionData;
-
-        // 3. Schrijf alles in één keer terug naar het bestand (overschrijft het oude bestand)
-        try
+        
+        /// <summary>
+        /// Track object viewing time each frame
+        /// </summary>
+        private void Update()
         {
-            File.WriteAllText(filePath, finalData, Encoding.UTF8);
-            Debug.Log($"[FINAL SAVE] Alle sessie data succesvol weggeschreven naar {filePath}");
+            float deltaTime = Time.time - _lastUpdateTime;
+            
+            AccumulateTimeForPreviousObject(deltaTime);
+            PerformRaycastForCurrentFrame();
+            
+            _lastUpdateTime = Time.time;
         }
-        catch (Exception e)
+        
+        /// <summary>
+        /// Load data from previous sessions if available
+        /// </summary>
+        private void LoadPreviousSessionData()
         {
-            Debug.LogError($"[CRITICAL] Fout bij het definitief schrijven naar CSV: {e.Message}");
+            if (File.Exists(_filePath))
+            {
+                _previousSessionData = File.ReadAllText(_filePath, Encoding.UTF8);
+                
+                // Add separator row
+                _previousSessionData += 
+                    $"\n\n{k_DELIMITER}{k_DELIMITER}--- NEW SESSION STARTED ON " +
+                    $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} ---{k_DELIMITER}\n";
+                    
+                Debug.Log("[SETUP] Previous session data loaded and separator row added.");
+            }
+            else
+            {
+                // File doesn't exist yet, start with custom header
+                _previousSessionData = 
+                    $"Timestamp{k_DELIMITER}ObjectName{k_DELIMITER}" +
+                    $"ProductCategory{k_DELIMITER}TotalLookTime(sec)\n";
+                Debug.Log("[SETUP] New CSV file header created.");
+            }
+        }
+        
+        /// <summary>
+        /// Accumulate time for the object that was viewed in the previous frame
+        /// </summary>
+        private void AccumulateTimeForPreviousObject(float deltaTime)
+        {
+            if (_lastHitObject != null)
+            {
+                string key = GetObjectKey(_lastHitObject);
+                
+                if (key != k_INVALID_HIERARCHY)
+                {
+                    if (_accumulatedLookTimes.ContainsKey(key))
+                    {
+                        _accumulatedLookTimes[key] += deltaTime;
+                    }
+                    else
+                    {
+                        _accumulatedLookTimes.Add(key, deltaTime);
+                    }
+                }
+            }
+        }
+        
+        /// <summary>
+        /// Perform raycast for the current frame to detect viewed objects
+        /// </summary>
+        private void PerformRaycastForCurrentFrame()
+        {
+            RaycastHit hit;
+            if (Physics.Raycast(
+                transform.position, 
+                transform.forward, 
+                out hit, 
+                _lookDistance))
+            {
+                _lastHitObject = hit.collider.gameObject;
+            }
+            else
+            {
+                _lastHitObject = null;
+            }
+        }
+        
+        /// <summary>
+        /// Get the hierarchical root name and validate the hierarchy
+        /// </summary>
+        private string GetHierarchicalRootName(Transform transform)
+        {
+            // Check if object itself is a Product Category
+            if (transform.CompareTag("Category"))
+            {
+                Debug.Log($"[HIERARCHY CHECK] Object {transform.name} is a Product Category");
+                return transform.name;
+            }
+            
+            // Check if parent has Product Parent tag
+            Transform parent = transform.parent;
+            if (parent != null && parent.CompareTag("Product"))
+            {
+                Debug.Log($"[HIERARCHY CHECK] Parent {parent.name} has Product Parent tag");
+                
+                // Look for sibling that is a Category
+                foreach (Transform sibling in parent)
+                {
+                    if (sibling.CompareTag("Category"))
+                    {
+                        Debug.Log($"[HIERARCHY CHECK] Found Category sibling: " +
+                                 $"{sibling.name} for Product {transform.name}");
+                        return sibling.name;
+                    }
+                }
+            }
+            
+            // Traverse up to find Category or Products root
+            Transform current = transform.parent;
+            while (current != null)
+            {
+                if (current.CompareTag("Category"))
+                {
+                    Debug.Log($"[HIERARCHY CHECK] Found Category ancestor: " +
+                             $"{current.name} for Product {transform.name}");
+                    return current.name;
+                }
+                
+                if (current.name == "Products")
+                {
+                    Debug.Log($"[HIERARCHY CHECK] Found Products root ancestor for " +
+                             $"{transform.name}");
+                    return transform.name;
+                }
+                
+                current = current.parent;
+            }
+            
+            // Fallback to original method if no tags found
+            Debug.LogWarning($"[HIERARCHY WARNING] No proper tags found for " +
+                            $"{transform.name}, using original method");
+            
+            return ValidateOriginalHierarchy(transform);
+        }
+        
+        /// <summary>
+        /// Validate the original hierarchy method as fallback
+        /// </summary>
+        private string ValidateOriginalHierarchy(Transform transform)
+        {
+            // Object's Parent (e.g., "water") - THIS IS THE GENRE WE NEED
+            Transform productGenreParent = transform.parent;
+            if (productGenreParent == null)
+            {
+                return k_INVALID_HIERARCHY;
+            }
+            
+            // Object's Grandparent (THE REQUIRED ROOT, e.g., "Products")
+            Transform requiredRoot = productGenreParent.parent;
+            if (requiredRoot == null)
+            {
+                return k_INVALID_HIERARCHY;
+            }
+            
+            // Validation: Check if the Grandparent has the required name ("Products")
+            if (requiredRoot.name == k_REQUIRED_ROOT_NAME)
+            {
+                Debug.Log($"[HIERARCHY CHECK] Validation passed: " +
+                         $"Root={requiredRoot.name}, Genre={productGenreParent.name}");
+                return productGenreParent.name;
+            }
+            
+            return k_INVALID_HIERARCHY;
+        }
+        
+        /// <summary>
+        /// Create a unique key that validates the hierarchy
+        /// </summary>
+        private string GetObjectKey(GameObject gameObject)
+        {
+            // Use object name directly since we're using tag-based detection
+            return gameObject.name;
+        }
+        
+        /// <summary>
+        /// Get the final storage of all total times for the CURRENT session
+        /// </summary>
+        private string GetCurrentSessionData()
+        {
+            StringBuilder stringBuilder = new StringBuilder();
+            
+            foreach (var kvp in _accumulatedLookTimes)
+            {
+                string objectName = kvp.Key;
+                float totalTime = kvp.Value;
+                
+                // Only save if total time exceeds minimum threshold
+                if (totalTime < k_MIN_LOOK_TIME)
+                {
+                    continue;
+                }
+                
+                // Format the data as a CSV row
+                string logEntry = 
+                    $"{DateTime.Now:yyyy-MM-dd HH:mm:ss}{k_DELIMITER}" +
+                    $"{objectName}{k_DELIMITER}{objectName}{k_DELIMITER}" +
+                    $"{totalTime:F2}\n";
+                    
+                stringBuilder.Append(logEntry);
+                Debug.Log($"[SESSION DATA] Prepared: {objectName} ({totalTime:F2}s)");
+            }
+            
+            return stringBuilder.ToString();
+        }
+        
+        /// <summary>
+        /// Ensure ALL data is saved when the application is closed
+        /// </summary>
+        private void OnApplicationQuit()
+        {
+            // Get data from current session
+            string currentSessionData = GetCurrentSessionData();
+            
+            // Combine old data, separator row, and new data
+            string finalData = _previousSessionData + currentSessionData;
+            
+            // Write everything back to the file in one operation
+            try
+            {
+                File.WriteAllText(_filePath, finalData, Encoding.UTF8);
+                Debug.Log($"[FINAL SAVE] All session data successfully written to {_filePath}");
+            }
+            catch (Exception exception)
+            {
+                Debug.LogError($"[CRITICAL] Error writing to CSV: {exception.Message}");
+            }
         }
     }
 }

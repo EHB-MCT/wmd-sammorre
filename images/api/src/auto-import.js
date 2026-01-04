@@ -83,7 +83,7 @@ class AutoImporter {
         for (const player of playersData) {
           await this.pool.query(
             'INSERT INTO players (id, player_name, created_at) VALUES ($1, $2, $3)',
-            [player.id, player.player_name, player.created_at]
+            [1000 + player.id, player.player_name, player.created_at]
           );
           totalImported++;
         }
@@ -98,7 +98,7 @@ class AutoImporter {
         for (const session of sessionsData) {
           await this.pool.query(
             'INSERT INTO sessions (id, player_id, started_at, ended_at) VALUES ($1, $2, $3, $4)',
-            [session.id, session.player_id, session.started_at, session.ended_at]
+            [2000 + session.id, 1000 + session.player_id, session.started_at, session.ended_at]
           );
           totalImported++;
         }
@@ -113,7 +113,7 @@ class AutoImporter {
         for (const lookTime of lookTimesData) {
           await this.pool.query(
             'INSERT INTO look_times (id, session_id, object_name, product_genre, total_time, created_at) VALUES ($1, $2, $3, $4, $5, $6)',
-            [lookTime.id, lookTime.session_id, lookTime.object_name, lookTime.product_genre, lookTime.total_time, lookTime.created_at]
+            [3000 + lookTime.id, 2000 + lookTime.session_id, lookTime.object_name, lookTime.product_genre, lookTime.total_time, lookTime.created_at]
           );
           totalImported++;
         }
