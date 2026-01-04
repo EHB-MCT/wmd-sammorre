@@ -8,6 +8,8 @@ services:
         condition: service_healthy
     environment:
       DATABASE_URL:
+    volumes:
+      - ./data:/app/data
   web:
     build: ./images/web
     ports:

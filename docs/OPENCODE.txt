@@ -1,0 +1,78 @@
+PLAN: can you read links from the web like this one: https://www.conventionalcommits.org/en/v1.0.0/ . If so can you tell me whats it about
+
+PLAN: i plan to use vue.js and an data visualiser npm to show that data, how can i make it so that if i run the docker compose file that the webpage with the data opens
+
+BUILD: can you read the OPENCODE.txt file and execute the commands (opencode: Make a new feature branch based these conventions: https://www.conventionalcommits.org/en/v1.0.0/
+after that install vue and the d3.js npm
+after that update the docker compose so that the webpage opens when i start the compose file
+only commit if i ask based on the git conventions of https://www.conventionalcommits.org/en/v1.0.0/)
+
+BUILD: can you first make a commit based on the git conventions of https://www.conventionalcommits.org/en/v1.0.0/ 
+
+BUILD: can you make a graph with the users  as x and the total sessions as y and rank it from highest to lowest show max 10 users (if there is less than 10 users show case all of them)
+
+BUILD: can you make a commit of what we have based on the git conventions of https://www.conventionalcommits.org/en/v1.0.0/
+
+PLAN: can your read OPENCODE.txt and tell me what it is about
+(opencode: step 1 Make a new feature branch based features using these conventions: https://www.conventionalcommits.org/en/v1.0.0/
+step 2 expanded the webpage (do not remove parts of it). I need to make more charts that show the userdata, graph 1 is zoomable icicle about the user productgenre,
+with a structure of product genre and then the specific product then total view time, the icicle colors should be based on the product genre (make it so that i can easily input which colors to assign to a genre in case i wanna change a color later), when clicking an a genre it should show the specific product in those genre that the user looked at and when clicking on a product it should show the time, make it full width with adjustable height, make the time also in Minutes and seconds (e.g., "2 min 5 sec")
+graph 2 should be about when the session happend (show only the date, hour and minutes), make the chart horizontal and have it bars based on duration
+i can change the chart data by inputing a inputfield with a username (both chart change when a user is filled), make the base user (when the page loads in) the the user with the most sessions.
+when inputing the user, show a dropdown with all the users that include those letters, if a user doesnt exist give an error in the input field,
+do not use pie charts
+make the charts under eachother 
+only commit if i ask based on the git conventions of https://www.conventionalcommits.org/en/v1.0.0/)
+
+based on the git conventions of https://www.conventionalcommits.org/en/v1.0.0/) using gitflow as branch structure
+
+
+// opencode can make propmt summaries
+
+Git Operations:
+- Clear the database
+- Replace bar chart with zoomable icicle visualization
+- Fix user session counting by correcting SQL GROUP BY clause
+- Add consistent color coding for products within same category
+- Show all users when search field is empty
+
+Unity Script:
+- Analyze product detection issues (duplicate names, hierarchy problems)
+- Understand current Unity hierarchy expectations (Products → Category → Product)
+- Implement tag-based detection solution
+- Fix IndexOutOfRangeException in CSV data generation
+
+Technical Solutions Provided:
+- Tag-based hierarchy detection using Unity tags
+- Support for Products → Category (Product tag) → Product Items structure  
+- Multiple products with same names support
+- Proper error handling and fallbacks
+
+API Improvements:
+- Fixed SQL GROUP BY issues
+- Added /users endpoint for fetching all users
+- Corrected duplicate user entries
+
+Frontend Enhancements:
+- Real-time session filtering
+- Responsive design improvements
+- Zoomable D3 icicle chart implementation
+- Color consistency across product categories
+- Enhanced user interface elements
+
+API Changes (ObjectLookTimeAPI.cs):
+- Modified /looktime endpoint to process 4-level hierarchy 
+- Extract product parent name for display instead of full hierarchy
+- Enhanced debugging and error handling
+
+Web Frontend Changes (SessionVisualization.vue):
+- Added clean name function to remove numbers from product names
+- Fixed chart proportional sizing issues 
+- Implemented zoomable icicle chart with proper transitions
+- Added professional chart features (zoom, back button, tooltips)
+
+System Operations:
+- Multiple Docker rebuilds to ensure clean deployment
+- Database schema analysis and verification
+- Frontend debugging and browser compatibility checks
+

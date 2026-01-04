@@ -1,10 +1,16 @@
 import express from "express";
 import { Pool } from "pg";
 import cors from "cors";
+import fs from 'fs';
+import path from 'path';
+import AutoImporter from './auto-import.js';
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// Initialize auto-importer (will be created after pool initialization)
+let autoImporter;
 
 const pool = new Pool({
   user: "postgres",
@@ -528,5 +534,38 @@ app.get("/users-search/:query", async (req, res) => {
   }
 });
 
-    console.log("API routes registered:");
-    app.listen(3000, () => console.log("API running on port 3000"));
+console.log("API routes registered:");
+
+// Auto-import data on startup
+async function startServer() {
+  try {
+    console.log('🚀 Starting server with auto-import check...');
+    
+    // Test database connection first
+    await pool.query('SELECT 1');
+    
+    // Initialize auto-importer after pool is ready
+    autoImporter = new AutoImporter(pool);
+    
+    // Run auto-import if database is empty
+    const importResult = await autoImporter.importAllData();
+    
+    if (importResult.action === 'imported') {
+      console.log(`✅ Auto-imported ${importResult.totalImported} records from data folder`);
+    } else {
+      console.log(`ℹ️ ${importResult.reason}`);
+    }
+    
+    app.listen(3000, () => {
+      console.log("API running on port 3000");
+      console.log('📊 Auto-import functionality enabled');
+    });
+    
+  } catch (error) {
+    console.error('❌ Failed to start server:', error);
+    process.exit(1);
+  }
+}
+
+// Start the server
+startServer();
