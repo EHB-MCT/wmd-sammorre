@@ -1,7 +1,7 @@
 <template>
   <div class="session-timeline">
       <div class="chart-header">
-       <h3>Top 10 Sessions by Duration (Ranked from Highest to Lowest)</h3>
+       <h3>Top 10 Sessions by Duration (Horizontal Bars)</h3>
      </div>
     
     <div ref="chartContainer" class="chart-container"></div>
@@ -67,11 +67,11 @@ export default {
         return
       }
       
-      // Chart dimensions
+      // Chart dimensions (horizontal layout)
       const containerWidth = chartContainer.value.clientWidth
       const margin = { top: 40, right: 40, bottom: 80, left: 120 }
       const width = containerWidth - margin.left - margin.right
-      const height = Math.max(300, processedData.length * 35 + margin.top + margin.bottom)
+      const height = Math.max(300, sortedData.length * 60 + margin.top + margin.bottom) // Taller for horizontal bars
       
       // Create SVG
       const svg = d3.select(chartContainer.value)
@@ -82,11 +82,11 @@ export default {
       const g = svg.append('g')
         .attr('transform', `translate(${margin.left},${margin.top})`)
       
-      // Scales
+      // Scales (horizontal layout)
       const maxDuration = d3.max(sortedData, d => d.duration)
       const x = d3.scaleLinear()
         .domain([0, maxDuration * 1.1]) // Add 10% padding
-        .range([0, width])
+        .range([0, width]) // Horizontal axis (duration)
       
       const y = d3.scaleBand()
         .domain(sortedData.map((d, i) => i))
@@ -97,23 +97,15 @@ export default {
       const colorScale = d3.scaleSequential(d3.interpolateBlues)
         .domain([0, maxDuration])
       
-      // Create gradient for bars
+      // Create gradient for horizontal bars
       const gradient = svg.append('defs')
         .append('linearGradient')
         .attr('id', 'duration-gradient')
         .attr('gradientUnits', 'userSpaceOnUse')
-        .attr('x1', 0).attr('y1', 0)
-        .attr('x2', width).attr('y2', 0)
+        .attr('x1', 0).attr('y1', 0) // Horizontal gradient
+        .attr('x2', 0).attr('y2', y.bandwidth()) // Vertical orientation
       
-      gradient.append('stop')
-        .attr('offset', '0%')
-        .attr('stop-color', '#e3f2fd')
-      
-      gradient.append('stop')
-        .attr('offset', '100%')
-        .attr('stop-color', '#1976d2')
-      
-      // X axis (duration)
+      // X axis (duration) - now horizontal axis
       const xAxis = d3.axisBottom(x)
         .tickFormat(d => {
           if (d === 0) return '0m'
@@ -126,16 +118,15 @@ export default {
         .attr('transform', `translate(0,${height - margin.top - margin.bottom})`)
         .call(xAxis)
         .append('text')
-        .attr('transform', 'rotate(-90)')
-        .attr('y', 0 - margin.left)
-        .attr('x', 0 - (height - margin.top - margin.bottom) / 2)
-        .attr('dy', '1em')
-        .style('text-anchor', 'middle')
+        .attr('transform', 'translate(${width/2}, ${height + 40})') // Move title below
+        .attr('y', 0)
+        .attr('x', 0)
+        .attr('text-anchor', 'middle')
         .style('font-size', '14px')
         .style('fill', '#666')
-        .text('Session Duration')
+        .text('Session Duration (minutes)')
       
-      // Y axis (ranking)
+      // Y axis (ranking) - now vertical axis for horizontal bars
       const yAxis = d3.axisLeft(y)
         .tickFormat((d, i) => {
           const session = sortedData[i]
@@ -149,15 +140,15 @@ export default {
         .style('font-size', '11px')
         .style('fill', '#666')
       
-      // Bars
+      // Bars (horizontal layout)
       const bars = g.selectAll('.bar')
         .data(sortedData)
         .enter().append('rect')
         .attr('class', 'bar')
+        .attr('x', 0) // Start at y-axis
         .attr('y', (d, i) => y(i))
         .attr('height', y.bandwidth())
-        .attr('x', 0)
-        .attr('width', d => x(d.duration))
+        .attr('width', d => x(d.duration)) // Horizontal width represents duration
         .attr('fill', d => colorScale(d.duration))
         .attr('stroke', '#fff')
         .attr('stroke-width', 1)
@@ -205,10 +196,10 @@ export default {
       
       // Add duration labels on bars
       const labels = g.selectAll('.bar-label')
-        .data(sortedData.filter(d => x(d.duration) > 40)) // Only show labels for wider bars
+        .data(sortedData.filter(d => x(d.duration) > 60)) // Only show labels for wider bars
         .enter().append('text')
         .attr('class', 'bar-label')
-        .attr('x', d => x(d.duration) + 5)
+        .attr('x', d => x(d.duration) + 5) // Position at end of horizontal bar
         .attr('y', (d, i) => y(i) + y.bandwidth() / 2)
         .attr('dy', '0.35em')
         .style('font-size', '11px')
@@ -230,7 +221,7 @@ export default {
         .style('font-size', '16px')
         .style('font-weight', 'bold')
         .style('fill', '#2c3e50')
-        .text('Top 10 Sessions by Duration')
+        .text('Top 10 Sessions by Duration (Horizontal)')
       
       // Tooltip functions
       const showTooltip = (event, d) => {
