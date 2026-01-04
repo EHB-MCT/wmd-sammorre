@@ -159,11 +159,40 @@ export default {
        try {
          timelineLoading.value = true
          timelineError.value = ''
-         const response = await axios.get(`/api/session-timing/${encodeURIComponent(username)}`)
-         const data = response.data.data || []
+         // Use working data endpoint and filter for user
+         const response = await axios.get('/data')
+         const allData = response.data.data || []
+         
+         // Filter data for specific user and create timeline structure
+         const userSessions = allData.filter(item => item.player_name === username) || []
+         const sessionMap = new Map()
+         
+         userSessions.forEach(item => {
+           const sessionKey = `${item.session_date}-${item.player_name}`
+           if (!sessionMap.has(sessionKey)) {
+             sessionMap.set(sessionKey, {
+               session_id: sessionKey.split('-')[0],
+               date: item.session_date.split('T')[0],
+               duration_seconds: 0,
+               hour: 0,
+               minute: 0
+             })
+           }
+         })
+         
+         // Calculate duration from user's look times
+         sessionMap.forEach((session, key) => {
+           const sessionItems = userSessions.filter(item => 
+             item.session_date.startsWith(key.split('-')[0]) && 
+             item.player_name === username
+           )
+           session.duration_seconds = sessionItems.reduce((sum, item) => sum + (item.total_time || 0), 0)
+         })
+         
+         const timelineArray = Array.from(sessionMap.values())
          
          // Sort by duration and limit to top 10 for ranking display
-         timelineData.value = data.sort((a, b) => b.duration_seconds - a.duration_seconds).slice(0, 10)
+         timelineData.value = timelineArray.sort((a, b) => b.duration_seconds - a.duration_seconds).slice(0, 10)
        } catch (err) {
          console.error('Error fetching timeline data:', err)
          timelineError.value = 'Failed to fetch session timing data'
