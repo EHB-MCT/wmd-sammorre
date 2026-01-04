@@ -1,0 +1,48 @@
+# Project Outcome Summary
+
+## Purpose & Vision
+
+The purpose of this project was supposed to be a game simulation where player uses AR glasses to help out with his shopping while on backend system takes notes on what the player looks at and for how long.
+
+## Current Reality
+
+Unfortunately, the project couldn't finish on time. The current state of the project is: products where the player looks at get stored in a database where you can see a visualization on a webpage.
+
+## Shortcomings & Challenges
+
+### Data Quality Issues
+The shortcomings of the data is that we don't really know the reason why a person needs a product. Is he looking at it because there is a sale going on, or is it something else? This means that we need to guess what the data tells us.
+
+### Proposed Solution
+To improve this, we could record each session so that we have a visual image of what the person sees, along with environmental context like sale signs, product placements, and user interactions.
+
+## Lessons Learned
+
+### Open Source Project Management
+What I learned from this project is how to make a project open source: I learned about licensing, standards, contributions, code of conduct, and the importance of proper documentation.
+
+### Technical Skills Development
+I also learned how to and why to use Docker as a program for containerization and deployment.
+
+### Project Structure & Dependencies
+An issue that came up is that I relied too much on open code and didn't really think about project structure. I also struggled with commits - I didn't really commit in early stages of the project, and when I did, I wasn't really following git branch rules.
+
+### Time Management & Planning
+The thing that messed me up the most was underestimating the project scale which led me to a time shortage where I couldn't finish the project the way I envisioned it.
+
+## Key Takeaways
+
+1. **Better Planning Needed**: Accurate time estimation and scope definition are crucial
+2. **Project Structure**: Investing time in proper project architecture pays dividends
+3. **Version Control**: Regular commits and proper branch management are essential
+4. **Dependency Management**: Balance between using external code and building custom solutions
+5. **Documentation**: Open source practices and documentation should be integrated from the start
+
+## Future Improvements
+
+If this project were to be continued, I would focus on:
+- Better time management and realistic scope setting
+- Improved project structure from day one
+- More robust data collection with context
+- Regular commit habits following conventional commits
+- Proper gitflow implementation from the beginning
