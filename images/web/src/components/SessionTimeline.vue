@@ -29,6 +29,8 @@ export default {
     const chartContainer = ref(null)
     
     const createChart = () => {
+      console.log('SessionTimeline: createChart called with data:', props.data?.length || 0)
+      
       if (!chartContainer.value || !props.data || props.data.length === 0) {
         if (chartContainer.value) {
           d3.select(chartContainer.value).selectAll("*").remove()
@@ -46,15 +48,86 @@ export default {
       // Clear existing chart
       d3.select(chartContainer.value).selectAll("*").remove()
       
-      // Process data
-      const processedData = props.data.map(session => ({
-        ...session,
-        duration: session.duration_seconds || 0,
-        dateObj: new Date(`${session.date} ${session.hour}:${session.minute}:00`)
-      })).filter(session => session.duration >= 0) // Include all sessions, even 0 duration
+      // Simple horizontal bar chart implementation
+      console.log('SessionTimeline: Creating horizontal chart with data:', props.data?.length || 0)
       
-      // Sort by duration (highest to lowest) and limit to top 10
-      const sortedData = processedData.sort((a, b) => b.duration - a.duration).slice(0, 10)
+      const containerWidth = chartContainer.value.clientWidth
+      const margin = { top: 40, right: 40, bottom: 60, left: 120 }
+      const width = containerWidth - margin.left - margin.right
+      const height = Math.max(300, sortedData.length * 40 + margin.top + margin.bottom)
+      
+      const svg = d3.select(chartContainer.value)
+        .append('svg')
+        .attr('width', containerWidth)
+        .attr('height', height)
+      
+      const g = svg.append('g')
+        .attr('transform', `translate(${margin.left},${margin.top})`)
+      
+      // Create simple horizontal bars
+      const maxDuration = Math.max(...sortedData.map(d => d.duration), 0)
+      const x = d3.scaleLinear().domain([0, maxDuration]).range([0, width])
+      
+      sortedData.forEach((d, i) => {
+        const barHeight = 30
+        const barWidth = x(d.duration)
+        
+        g.append('rect')
+          .attr('x', 0)
+          .attr('y', i * (barHeight + 5))
+          .attr('width', barWidth)
+          .attr('height', barHeight)
+          .attr('fill', '#1976d2')
+          .attr('stroke', '#fff')
+          .attr('stroke-width', 1)
+        
+        // Add rank label
+        g.append('text')
+          .attr('x', -10)
+          .attr('y', i * (barHeight + 5) + barHeight/2)
+          .attr('text-anchor', 'end')
+          .style('font-size', '12px')
+          .style('fill', '#666')
+          .text(`#${i + 1}`)
+        
+        // Add session label
+        g.append('text')
+          .attr('x', barWidth + 5)
+          .attr('y', i * (barHeight + 5) + barHeight/2)
+          .attr('text-anchor', 'start')
+          .style('font-size', '11px')
+          .style('fill', '#333')
+          .text(`Session ${d.session_id}: ${Math.round(d.duration/60)}m`)
+      })
+      
+      // Add x-axis
+      g.append('g')
+        .attr('transform', `translate(0,${height - margin.bottom + margin.top})`)
+        .call(d3.axisBottom(x).tickFormat(d => {
+          const minutes = Math.floor(d / 60)
+          const seconds = Math.round(d % 60)
+          return seconds === 0 ? `${minutes}m` : `${minutes}m ${seconds}s`
+        }))
+      
+      // Add x-axis label
+      svg.append('text')
+        .attr('x', containerWidth / 2)
+        .attr('y', height - 10)
+        .attr('text-anchor', 'middle')
+        .style('font-size', '14px')
+        .style('fill', '#2c3e50')
+        .text('Duration (minutes)')
+      
+      // Add title
+      svg.append('text')
+        .attr('x', containerWidth / 2)
+        .attr('y', 20)
+        .attr('text-anchor', 'middle')
+        .style('font-size', '16px')
+        .style('font-weight', 'bold')
+        .style('fill', '#2c3e50')
+        .text('Top 10 Sessions by Duration')
+    }
       
       if (sortedData.length === 0) {
         d3.select(chartContainer.value)
@@ -148,7 +221,11 @@ export default {
         .attr('x', 0) // Start at y-axis
         .attr('y', (d, i) => y(i))
         .attr('height', y.bandwidth())
-        .attr('width', d => x(d.duration)) // Horizontal width represents duration
+        .attr('width', d => {
+          const width = x(d.duration)
+          console.log(`Bar ${d.session_id}: width=${width}, duration=${d.duration}`)
+          return width
+        })
         .attr('fill', d => colorScale(d.duration))
         .attr('stroke', '#fff')
         .attr('stroke-width', 1)
@@ -300,7 +377,7 @@ export default {
 
 .chart-container {
   width: 100%;
-  min-height: 300px;
+  min-height: 400px; /* Increased height for horizontal layout */
   border: 1px solid #e0e0e0;
   border-radius: 8px;
   background: white;
@@ -310,5 +387,9 @@ export default {
 .chart-container svg {
   width: 100%;
   height: 100%;
+}
+
+.bar {
+  min-height: 20px; /* Ensure bars are visible even with small values */
 }
 </style>
