@@ -159,35 +159,34 @@ export default {
        try {
          timelineLoading.value = true
          timelineError.value = ''
-         // Use working data endpoint and filter for user
-         const response = await axios.get('/data')
+          // Use working data endpoint and filter for user
+          const response = await axios.get('/api/data')
          const allData = response.data.data || []
          
-         // Filter data for specific user and create timeline structure
-         const userSessions = allData.filter(item => item.player_name === username) || []
-         const sessionMap = new Map()
-         
-         userSessions.forEach(item => {
-           const sessionKey = `${item.session_date}-${item.player_name}`
-           if (!sessionMap.has(sessionKey)) {
-             sessionMap.set(sessionKey, {
-               session_id: sessionKey.split('-')[0],
-               date: item.session_date.split('T')[0],
-               duration_seconds: 0,
-               hour: 0,
-               minute: 0
-             })
-           }
-         })
-         
-         // Calculate duration from user's look times
-         sessionMap.forEach((session, key) => {
-           const sessionItems = userSessions.filter(item => 
-             item.session_date.startsWith(key.split('-')[0]) && 
-             item.player_name === username
-           )
-           session.duration_seconds = sessionItems.reduce((sum, item) => sum + (item.total_time || 0), 0)
-         })
+          // Filter data for specific user and create timeline structure
+          const userSessions = allData.filter(item => item.player_name === username) || []
+          const sessionMap = new Map()
+          
+          userSessions.forEach(item => {
+            // Use the full timestamp as session key since each session has a unique timestamp
+            const sessionKey = item.session_date
+            if (!sessionMap.has(sessionKey)) {
+              sessionMap.set(sessionKey, {
+                session_id: new Date(sessionKey).getTime().toString().slice(-6), // Create short unique ID
+                date: item.session_date.split('T')[0],
+                session_date: item.session_date,
+                duration_seconds: 0,
+                hour: new Date(sessionKey).getHours(),
+                minute: new Date(sessionKey).getMinutes()
+              })
+            }
+          })
+          
+          // Calculate duration from user's look times by session
+          sessionMap.forEach((session, sessionKey) => {
+            const sessionItems = userSessions.filter(item => item.session_date === sessionKey)
+            session.duration_seconds = sessionItems.reduce((sum, item) => sum + (item.total_time || 0), 0)
+          })
          
          const timelineArray = Array.from(sessionMap.values())
          
