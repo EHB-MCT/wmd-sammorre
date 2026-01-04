@@ -317,7 +317,7 @@ export default {
         
         const sessionDateTime = formatSessionDateTime(d.date, d.hour, d.minute)
         
-        const rank = sortedData.findIndex(s => s.session_id === d.session_id) + 1
+        const rank = sortedData.findIndex(s => s.session_id === d.session_id) + 1,
         tooltip.html(`
           <strong>Rank #${rank} - Session #${d.session_id}</strong><br>
           ${sessionDateTime}<br>
@@ -354,9 +354,10 @@ export default {
     
     return {
       chartContainer
+        }
+      }
+    }, // Add missing comma here
     }
-  }
-}
 </script>
 
 <style scoped>

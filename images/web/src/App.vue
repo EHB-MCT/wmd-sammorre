@@ -34,7 +34,7 @@
         />
         
         <!-- Session Timeline -->
-        <SessionTimeline 
+        <SessionTimelineSimple 
           :data="timelineData"
           :loading="timelineLoading"
         />
