@@ -4,7 +4,7 @@ A data collection system that tracks user shopping behavior through game interac
 
 ## Playing the game
 this github page doesnt include the game files.
-To play the game, download the entire project from https://ehb-my.sharepoint.com/:u:/g/personal/sam_morre_student_ehb_be/IQDVgEhyXhzBTYFM4me9fHqWAVlL5UUfzTohkZw8VIgnnTU?e=w35gV0
+To play the game, download the entire project from https://ehb-my.sharepoint.com/:u:/g/personal/sam_morre_student_ehb_be/IQD_8PJye7xJRbc3PRoAZ-nnAemUDpGzgdx7Cly5kleZKXs?e=Zhyti8
 
 ## Features
 
