@@ -149,26 +149,29 @@ export default {
       }
     }
     
-    // Fetch timeline data for session chart
-    const fetchTimelineData = async (username) => {
-      if (!username) {
-        timelineData.value = []
-        return
-      }
-      
-      try {
-        timelineLoading.value = true
-        timelineError.value = ''
-        const response = await axios.get(`/api/session-timing/${encodeURIComponent(username)}`)
-        timelineData.value = response.data.data || []
-      } catch (err) {
-        console.error('Error fetching timeline data:', err)
-        timelineError.value = 'Failed to fetch session timing data'
-        timelineData.value = []
-      } finally {
-        timelineLoading.value = false
-      }
-    }
+     // Fetch timeline data for session chart
+     const fetchTimelineData = async (username) => {
+       if (!username) {
+         timelineData.value = []
+         return
+       }
+       
+       try {
+         timelineLoading.value = true
+         timelineError.value = ''
+         const response = await axios.get(`/api/session-timing/${encodeURIComponent(username)}`)
+         const data = response.data.data || []
+         
+         // Sort by duration and limit to top 10 for ranking display
+         timelineData.value = data.sort((a, b) => b.duration_seconds - a.duration_seconds).slice(0, 10)
+       } catch (err) {
+         console.error('Error fetching timeline data:', err)
+         timelineError.value = 'Failed to fetch session timing data'
+         timelineData.value = []
+       } finally {
+         timelineLoading.value = false
+       }
+     }
     
     // Get user with most sessions for default selection
     const getDefaultUser = async () => {
