@@ -2,6 +2,10 @@
 
 A data collection system that tracks user shopping behavior through game interactions and visualizes the collected data through a web dashboard.
 
+##Playing the game
+this github page doesnt include the game files.
+To play the game, download the entire project from https://ehb-my.sharepoint.com/:u:/g/personal/sam_morre_student_ehb_be/IQDVgEhyXhzBTYFM4me9fHqWAVlL5UUfzTohkZw8VIgnnTU?e=w35gV0
+
 ## Features
 
 - Unity game that tracks user shopping behavior
