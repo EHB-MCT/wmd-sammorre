@@ -8,6 +8,9 @@ services:
         condition: service_healthy
     environment:
       DATABASE_URL:
+      AUTO_IMPORT_DATA: "true"
+    volumes:
+      - ./data:/app/data
   web:
     build: ./images/web
     ports:

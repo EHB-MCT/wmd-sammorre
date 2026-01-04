@@ -1,0 +1,42 @@
+[
+  {
+    "id": 1,
+    "player_name": "Alice",
+    "created_at": "2024-01-15T10:30:00.000Z"
+  },
+  {
+    "id": 2,
+    "player_name": "Bob",
+    "created_at": "2024-01-16T14:20:00.000Z"
+  },
+  {
+    "id": 3,
+    "player_name": "Charlie",
+    "created_at": "2024-01-17T09:15:00.000Z"
+  },
+  {
+    "id": 4,
+    "player_name": "Diana",
+    "created_at": "2024-01-18T16:45:00.000Z"
+  },
+  {
+    "id": 5,
+    "player_name": "Eve",
+    "created_at": "2024-01-19T11:30:00.000Z"
+  },
+  {
+    "id": 6,
+    "player_name": "Frank",
+    "created_at": "2024-01-20T13:10:00.000Z"
+  },
+  {
+    "id": 7,
+    "player_name": "Grace",
+    "created_at": "2024-01-21T15:25:00.000Z"
+  },
+  {
+    "id": 8,
+    "player_name": "Henry",
+    "created_at": "2024-01-22T10:40:00.000Z"
+  }
+]

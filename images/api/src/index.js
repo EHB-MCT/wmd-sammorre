@@ -1,6 +1,12 @@
 import express from "express";
 import { Pool } from "pg";
 import cors from "cors";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 app.use(cors());
@@ -13,6 +19,9 @@ const pool = new Pool({
   password: "mysecretpassword",
   port: 5432,
 });
+
+// Data directory path
+const DATA_DIR = path.join(__dirname, '../../data');
 
 /* -------------------------------------------
    CREATE PLAYER
@@ -528,5 +537,272 @@ app.get("/users-search/:query", async (req, res) => {
   }
 });
 
+/* -------------------------------------------
+   DATA EXPORT/IMPORT FUNCTIONALITY
+--------------------------------------------*/
+
+/* -------------------------------------------
+   EXPORT DATABASE DATA TO JSON FILES
+--------------------------------------------*/
+app.get("/export-data", async (req, res) => {
+  try {
+    // Ensure data directory exists
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+
+    // Export players
+    const playersResult = await pool.query('SELECT * FROM players ORDER BY id');
+    fs.writeFileSync(
+      path.join(DATA_DIR, 'players.json'),
+      JSON.stringify(playersResult.rows, null, 2)
+    );
+
+    // Export sessions
+    const sessionsResult = await pool.query('SELECT * FROM sessions ORDER BY id');
+    fs.writeFileSync(
+      path.join(DATA_DIR, 'sessions.json'),
+      JSON.stringify(sessionsResult.rows, null, 2)
+    );
+
+    // Export look_times
+    const lookTimesResult = await pool.query('SELECT * FROM look_times ORDER BY id');
+    fs.writeFileSync(
+      path.join(DATA_DIR, 'look_times.json'),
+      JSON.stringify(lookTimesResult.rows, null, 2)
+    );
+
+    res.json({
+      success: true,
+      message: 'Data exported successfully',
+      files: ['players.json', 'sessions.json', 'look_times.json'],
+      counts: {
+        players: playersResult.rowCount,
+        sessions: sessionsResult.rowCount,
+        look_times: lookTimesResult.rowCount
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/* -------------------------------------------
+   IMPORT DATA FROM JSON FILES TO DATABASE
+--------------------------------------------*/
+app.post("/import-data", async (req, res) => {
+  try {
+    // Check if data directory exists
+    if (!fs.existsSync(DATA_DIR)) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Data directory not found' 
+      });
+    }
+
+    const playersFile = path.join(DATA_DIR, 'players.json');
+    const sessionsFile = path.join(DATA_DIR, 'sessions.json');
+    const lookTimesFile = path.join(DATA_DIR, 'look_times.json');
+
+    // Check if all files exist
+    if (!fs.existsSync(playersFile) || !fs.existsSync(sessionsFile) || !fs.existsSync(lookTimesFile)) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'One or more data files not found' 
+      });
+    }
+
+    // Read JSON files
+    const players = JSON.parse(fs.readFileSync(playersFile, 'utf8'));
+    const sessions = JSON.parse(fs.readFileSync(sessionsFile, 'utf8'));
+    const lookTimes = JSON.parse(fs.readFileSync(lookTimesFile, 'utf8'));
+
+    await pool.query('BEGIN');
+
+    // Clear existing data
+    await pool.query('DELETE FROM look_times');
+    await pool.query('DELETE FROM sessions');
+    await pool.query('DELETE FROM players');
+
+    // Import players
+    for (const player of players) {
+      await pool.query(
+        'INSERT INTO players (id, player_name, created_at) VALUES ($1, $2, $3)',
+        [player.id, player.player_name, player.created_at]
+      );
+    }
+
+    // Import sessions
+    for (const session of sessions) {
+      await pool.query(
+        'INSERT INTO sessions (id, player_id, started_at, ended_at) VALUES ($1, $2, $3, $4)',
+        [session.id, session.player_id, session.started_at, session.ended_at]
+      );
+    }
+
+    // Import look_times
+    for (const lookTime of lookTimes) {
+      await pool.query(
+        'INSERT INTO look_times (id, session_id, object_name, product_genre, total_time, created_at) VALUES ($1, $2, $3, $4, $5, $6)',
+        [lookTime.id, lookTime.session_id, lookTime.object_name, lookTime.product_genre, lookTime.total_time, lookTime.created_at]
+      );
+    }
+
+    await pool.query('COMMIT');
+
+    res.json({
+      success: true,
+      message: 'Data imported successfully',
+      counts: {
+        players: players.length,
+        sessions: sessions.length,
+        look_times: lookTimes.length
+      }
+    });
+  } catch (err) {
+    await pool.query('ROLLBACK');
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/* -------------------------------------------
+   CHECK DATA STATUS
+--------------------------------------------*/
+app.get("/data-status", async (req, res) => {
+  try {
+    // Check if database has data
+    const playersCount = await pool.query('SELECT COUNT(*) as count FROM players');
+    const sessionsCount = await pool.query('SELECT COUNT(*) as count FROM sessions');
+    const lookTimesCount = await pool.query('SELECT COUNT(*) as count FROM look_times');
+
+    // Check if JSON files exist
+    const hasDataFiles = fs.existsSync(DATA_DIR) && 
+      fs.existsSync(path.join(DATA_DIR, 'players.json')) &&
+      fs.existsSync(path.join(DATA_DIR, 'sessions.json')) &&
+      fs.existsSync(path.join(DATA_DIR, 'look_times.json'));
+
+    res.json({
+      success: true,
+      database: {
+        hasData: parseInt(playersCount.rows[0].count) > 0,
+        counts: {
+          players: parseInt(playersCount.rows[0].count),
+          sessions: parseInt(sessionsCount.rows[0].count),
+          look_times: parseInt(lookTimesCount.rows[0].count)
+        }
+      },
+      files: {
+        exist: hasDataFiles
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/* -------------------------------------------
+   AUTO-IMPORT DATA ON STARTUP
+--------------------------------------------*/
+async function autoImportData() {
+  try {
+    console.log('Checking for auto-import data...');
+    
+    // Skip if AUTO_IMPORT_DATA is not 'true'
+    if (process.env.AUTO_IMPORT_DATA !== 'true') {
+      console.log('AUTO_IMPORT_DATA is not enabled, skipping...');
+      return;
+    }
+
+    // Check if database already has data
+    const playersCount = await pool.query('SELECT COUNT(*) as count FROM players');
+    if (parseInt(playersCount.rows[0].count) > 0) {
+      console.log('Database already contains data, skipping auto-import...');
+      return;
+    }
+
+    // Check if data files exist
+    const playersFile = path.join(DATA_DIR, 'players.json');
+    const sessionsFile = path.join(DATA_DIR, 'sessions.json');
+    const lookTimesFile = path.join(DATA_DIR, 'look_times.json');
+
+    if (!fs.existsSync(playersFile) || !fs.existsSync(sessionsFile) || !fs.existsSync(lookTimesFile)) {
+      console.log('Data files not found, skipping auto-import...');
+      return;
+    }
+
+    console.log('Starting auto-import of data...');
+    
+    // Perform import
+    const response = await importDataFromFiles();
+    
+    if (response.success) {
+      console.log(`Auto-import completed: ${JSON.stringify(response.counts)}`);
+    } else {
+      console.error('Auto-import failed:', response.error);
+    }
+  } catch (err) {
+    console.error('Auto-import error:', err.message);
+  }
+}
+
+async function importDataFromFiles() {
+  try {
+    const playersFile = path.join(DATA_DIR, 'players.json');
+    const sessionsFile = path.join(DATA_DIR, 'sessions.json');
+    const lookTimesFile = path.join(DATA_DIR, 'look_times.json');
+
+    // Read JSON files
+    const players = JSON.parse(fs.readFileSync(playersFile, 'utf8'));
+    const sessions = JSON.parse(fs.readFileSync(sessionsFile, 'utf8'));
+    const lookTimes = JSON.parse(fs.readFileSync(lookTimesFile, 'utf8'));
+
+    await pool.query('BEGIN');
+
+    // Import players
+    for (const player of players) {
+      await pool.query(
+        'INSERT INTO players (id, player_name, created_at) VALUES ($1, $2, $3)',
+        [player.id, player.player_name, player.created_at]
+      );
+    }
+
+    // Import sessions
+    for (const session of sessions) {
+      await pool.query(
+        'INSERT INTO sessions (id, player_id, started_at, ended_at) VALUES ($1, $2, $3, $4)',
+        [session.id, session.player_id, session.started_at, session.ended_at]
+      );
+    }
+
+    // Import look_times
+    for (const lookTime of lookTimes) {
+      await pool.query(
+        'INSERT INTO look_times (id, session_id, object_name, product_genre, total_time, created_at) VALUES ($1, $2, $3, $4, $5, $6)',
+        [lookTime.id, lookTime.session_id, lookTime.object_name, lookTime.product_genre, lookTime.total_time, lookTime.created_at]
+      );
+    }
+
+    await pool.query('COMMIT');
+
+    return {
+      success: true,
+      counts: {
+        players: players.length,
+        sessions: sessions.length,
+        look_times: lookTimes.length
+      }
+    };
+  } catch (err) {
+    await pool.query('ROLLBACK');
+    throw err;
+  }
+}
+
     console.log("API routes registered:");
+    
+    // Start auto-import after a short delay to ensure database is ready
+    setTimeout(async () => {
+      await autoImportData();
+    }, 2000);
+    
     app.listen(3000, () => console.log("API running on port 3000"));

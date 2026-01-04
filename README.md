@@ -8,6 +8,8 @@ A data collection system that tracks user shopping behavior through game interac
 - Real-time data collection of viewing patterns and duration
 - PostgreSQL database for data storage
 - Web dashboard with interactive visualizations
+- **JSON data persistence** - Automatic import of demo data on startup
+- **Export/Import functionality** - Save and restore database state
 - Docker containerization for easy deployment
 
 ## Tech Stack
@@ -41,11 +43,17 @@ cd images/web && npm install && npm run dev
 
 **Don't forget**: `cp .env.template .env` and configure your environment variables!
 
+The project includes demo data that will be automatically imported when you first start the containers.
+
 ## Project Structure
 
 ```
 wmd-sammorre/
 ├── docker-compose.yml        # Service orchestration
+├── data/                    # JSON data files (for demo data)
+│   ├── players.json          # Player data
+│   ├── sessions.json         # Session data
+│   └── look_times.json      # Look time data
 ├── images/
 │   ├── api/              # Node.js API Service
 │   │   ├── src/
@@ -69,10 +77,12 @@ wmd-sammorre/
 ## Current Status
 
 ### Implemented
-- **User Tracking** - Records what products the user looks at
+- **User Tracking** - Records what products user looks at
 - **Duration Measurement** - Measures viewing time for each product
 - **Database Integration** - Stores all collected data in PostgreSQL
 - **Web Dashboard** - Real-time visualization of user behavior
+- **Data Persistence** - Automatic import of demo data on startup
+- **Export/Import API** - REST endpoints for data backup and restore
 - **Docker Setup** - Complete containerized environment
 
 ### In Development
@@ -86,6 +96,37 @@ The system currently tracks:
 - **Product Information** - What items users view
 - **View Duration** - How long each product is looked at
 - **Timestamps** - When sessions occur
+
+## Data Persistence
+
+The system includes automatic data persistence for easy setup:
+
+### Automatic Demo Data
+- On first startup, demo data is automatically imported from `data/` directory
+- Includes sample users, sessions, and look time data
+- Data is only imported if database is empty
+
+### Manual Data Management
+
+**Export current data:**
+```bash
+curl http://localhost:3000/export-data
+```
+
+**Import data from files:**
+```bash
+curl -X POST http://localhost:3000/import-data
+```
+
+**Check data status:**
+```bash
+curl http://localhost:3000/data-status
+```
+
+### Environment Variables
+- `AUTO_IMPORT_DATA=true` enables automatic import on startup
+- Data files are stored in `data/` directory
+- Files: `players.json`, `sessions.json`, `look_times.json`
 
 ## Dev Commands
 
@@ -106,7 +147,7 @@ The system currently tracks:
 **D3js chart** - [d3js.org](https://observablehq.com/@d3/zoomable-icicle)  
    Data visualization and interactive charts
 
-6**Docker Compose** - [docs.docker.com](https://docs.docker.com/compose)  
+**Docker Compose** - [docs.docker.com](https://docs.docker.com/compose)  
    Containerization and multi-container applications
 
 **Opencode** - promts can be found in docs/OPENCODE.txt
